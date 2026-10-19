@@ -13,7 +13,6 @@ from datetime import UTC, datetime
 from importlib import metadata
 from pathlib import Path
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 
 PACKAGES = ("numpy", "torch", "openvino", "lerobot", "physicalai", "pyzmq", "nncf", "transformers")
 THREAD_ENV = ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "VLA_N_THREADS",
@@ -40,8 +39,8 @@ def _git_commit() -> str:
         return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout.strip()
 
     try:
-        commit = run(___)  # 【穴①】現在のコミットIDを表示する git のサブコマンドと引数
-        dirty = run(___) != ""  # 【穴②】変更ファイルを機械向けの形式で一覧する git のサブコマンドと引数
+        commit = run("rev-parse", "HEAD")  # 【穴①】現在のコミットIDを表示する git のサブコマンドと引数
+        dirty = run("status", "--porcelain") != ""  # 【穴②】変更ファイルを機械向けの形式で一覧する git のサブコマンドと引数
     except (OSError, subprocess.CalledProcessError):
         return "unknown"
     return commit + ("-dirty" if dirty else "")
@@ -51,7 +50,7 @@ def _cpu_model() -> str:
     try:
         for line in Path("/proc/cpuinfo").read_text().splitlines():
             if line.startswith("model name"):
-                return ___  # 【穴③】"model name	: 13th Gen ..." のコロンより後ろ
+                return str(line.split(": ", 1)[-1])  # 【穴③】"model name	: 13th Gen ..." のコロンより後ろ
     except OSError:
         pass
     return platform.processor()
@@ -61,7 +60,7 @@ def _mem_total_gb() -> float:
     for line in Path("/proc/meminfo").read_text().splitlines():
         if line.startswith("MemTotal:"):
             kib = int(line.split()[1])
-            return round(___, 2)  # 【穴④】KiB → GiB
+            return round(kib / (1024**2), 2)  # 【穴④】KiB → GiB
     return float("nan")
 
 
@@ -69,7 +68,7 @@ def _packages() -> dict[str, str]:
     out = {}
     for name in PACKAGES:
         try:
-            out[name] = ___  # 【穴⑤】import せずにインストール済みの版を得る（importlib.metadata）
+            out[name] = metadata.version(name)  # 【穴⑤】import せずにインストール済みの版を得る（importlib.metadata）
         except metadata.PackageNotFoundError:
             continue
     return out
@@ -89,7 +88,7 @@ def capture_env() -> EnvSnapshot:
         hostname=socket.gethostname(),
         cpu_model=_cpu_model(),
         n_logical_cpus=os.cpu_count() or 0,
-        cpu_affinity=sorted(___),  # 【穴⑥】このプロセスが動いてよいCPU番号の集合（os モジュール）
+        cpu_affinity=sorted(os.sched_getaffinity(0)),  # 【穴⑥】このプロセスが動いてよいCPU番号の集合（os モジュール）
         mem_total_gb=_mem_total_gb(),
         python=platform.python_version(),
         packages=_packages(),
@@ -101,5 +100,5 @@ def capture_env() -> EnvSnapshot:
 
 def save_env(path: Path) -> EnvSnapshot:
     snap = capture_env()
-    path.write_text(json.dumps(___, indent=2, ensure_ascii=False))  # 【穴⑦】dataclass を辞書に変換する関数
+    path.write_text(json.dumps(dataclasses.asdict(snap), indent=2, ensure_ascii=False))  # 【穴⑦】dataclass を辞書に変換する関数
     return snap
