@@ -1,9 +1,9 @@
 # common/40. 評価指標の取得方法と、測定条件の統一
 
-> **穴埋め版**（進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
-> - 埋めるファイル（穴の数）：`src/evla/analysis/power.py`（4）、`src/evla/analysis/rtf.py`（2）、`scripts/attach_power.py`（1）、`scripts/clock_check.sh`（1）
-> - テスト：`pytest tests/analysis/test_power.py tests/analysis/test_extrapolate_rtf.py`
-> - 「5. 実装手順」は、ゼロから書く場合の手順です。穴埋め版では、手順の中の**確認作業**（動作確認・測定・完了条件）を行い、コードは穴を埋めるだけで足ります。
+> **ハンズオン**（共通の進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - この章で埋める穴：**8個**（`src/evla/analysis/` の `power.py` 4、`rtf.py` 2、`scripts/attach_power.py` 1、`scripts/clock_check.sh` 1）
+> - ゴール：`pytest tests/analysis/test_power.py` と `pytest tests/analysis/test_extrapolate_rtf.py -k rtf` が通り、モードAの run に電力・温度・クロック・1推論あたりのエネルギーが付く
+> - 進め方：Windows 側の準備（Step 1〜2）→ 集計の穴（Step 3〜5）→ 自分用の測定手順書（Step 6）
 
 ## 1. 目的と計画書の対応
 
@@ -82,14 +82,112 @@ def rtf_series(t_sim_s: npt.ArrayLike, t_wall_ns: npt.ArrayLike, window_s: float
 
 Gazeboの統計（`/stats` トピックの `real_time_factor`）も参照値として記録します（`gz topic -e -t /stats` を別プロセスでファイルに流す）。
 
-## 5. 実装手順
+## 5. ハンズオン
 
-1. **Windows側のログ（1時間）**：HWiNFO64を入れ、「センサーのみ」で起動し、ログの間隔を1秒（できれば500ms）にしてCSVに保存する設定をする。CPU Package Power、IA Cores Power、GT（iGPU）Power、CPU Package温度、コアの実効クロック、（あれば）Power Limit の状態の列が入ることを確認する。
-2. **時計のずれの確認（30分）**：WSLの `date +%s.%N` と、Windows（PowerShellの `Get-Date -Format o`）を並べて表示し、ずれを測る。スリープ復帰後にWSLの時計がずれることがあるので、**測定の前に毎回確認する**。ずれが大きければ `wsl --shutdown` で再起動する。
-3. **`power.py`（2時間）**：CSVの読み込み、区間の集計、アイドルの差し引き。テストには、手で作った小さなCSVを使う。
-4. **`attach_power.py`（1時間）**：各runの `summary.json` に `PowerSummary` を追記する。
-5. **RTF（1時間）**：34章・38章のノードで、`(sim時刻, 壁時計)` を記録するようにし、`rtf.py` で計算する。
-6. **SOPの作成（30分）**：6節を自分用のチェックリストにする。
+各 Step は「**準備する／埋める → 動かす → 確かめる**」の1サイクルです。電力と温度は **Windows 側**（HWiNFO）でしか取れないので、WSL の結果と**時刻で突き合わせ**ます。時計のずれの確認（Step 2）を飛ばすと、別の区間の電力を集計してしまいます。
+
+### Step 0：準備（5分）
+
+```bash
+grep -n "【穴" src/evla/analysis/{power,rtf}.py scripts/attach_power.py scripts/clock_check.sh
+```
+
+- [ ] 穴8個が表示される
+
+### Step 1：Windows 側のログ（1時間）
+
+1. HWiNFO64 を入れ、「センサーのみ」で起動する。
+2. ログの間隔を1秒（できれば500ms）にして、CSV に保存する設定をする。
+
+- [ ] CSV に CPU Package Power、IA Cores Power、GT（iGPU）Power、CPU Package 温度、コアの実効クロック、（あれば）Power Limit の状態の列が入っている
+- [ ] CSV を WSL から読める場所（例：`/mnt/c/Users/<you>/hwinfo/`）に保存する設定にした
+
+### Step 2：時計のずれ ― `scripts/clock_check.sh`（穴①、30分）
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | `date +%s%N` はナノ秒、PowerShell の値はミリ秒。単位を揃えてから引く（bash の整数演算） |
+
+**動かす**
+
+```bash
+bash scripts/clock_check.sh
+```
+
+- [ ] `WSL - Windows = ... ms` が表示される。数百 ms 以内なら OK（PowerShell の起動時間ぶん WSL が先になる）
+- [ ] 数秒以上ずれていたら `wsl --shutdown` で再起動する。**測定の前に毎回確認する**（スリープ復帰後にずれることがある）
+
+### Step 3：電力の集計 ― `power.py`（穴①〜④、2時間）
+
+**読む**：4節の `PowerSummary` と、`tests/analysis/test_power.py`（手で作った小さな CSV）。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | HWiNFO の列名は版や言語で揺れる。大文字小文字を無視して、全キーワードが含まれる列を探す（`all` と `in`） |
+| ② | HWiNFO の時刻はローカル時刻。タイムゾーンを付けてから UTC に変換する（pandas の `tz_localize` → `tz_convert`） |
+| ③ | 時刻の index で区間を切り出す（`.loc` のスライス） |
+| ④ | 1推論あたりのエネルギー[J] ＝（平均電力 − アイドル電力）[W] × 1推論の時間[s] |
+
+**動かす**
+
+```bash
+source .venv-bench/bin/activate
+pytest tests/analysis/test_power.py -v
+```
+
+- [ ] `test_summarize` が `PASSED`（負荷中 25W・アイドル 5W・1秒の推論 → 20J）
+
+### Step 4：run に電力を付ける ― `scripts/attach_power.py`（穴①、1時間）
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | 区間の終わり＝最後の推論の開始時刻＋その推論の長さ。`latency_ms` を ns に直す |
+
+**動かす**：HWiNFO のログを取りながら、モードAを1つ測ります。
+
+```bash
+bash scripts/clock_check.sh
+python scripts/bench_mode_a.py --config configs/bench/torch_cpu.yaml
+RUN=results/runs/$(ls results/runs | grep modeA | tail -1)
+python scripts/attach_power.py --hwinfo /mnt/c/Users/<you>/hwinfo/log.csv --runs $RUN
+```
+
+- [ ] `<run_id>: xx.xW, x.xJ/infer, throttled=False` が表示され、`summary.json` に `power` が追記されている
+- [ ] `throttled=True` なら、その run は温度・電力制限の影響を受けている。6節の手順で測り直す
+
+### Step 5：RTF ― `rtf.py`（穴①②、1時間）
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | ソート済みの壁時計の配列で、「window_s 秒前」の位置を二分探索する NumPy の関数 |
+| ② | 窓の中での sim 時刻の増分 ÷ 壁時計の増分 |
+
+**動かす**
+
+```bash
+pytest tests/analysis/test_extrapolate_rtf.py -v -k rtf
+```
+
+- [ ] `test_rtf_half_speed` が `PASSED`（sim が半分の速さなら RTF=0.5、窓が埋まるまでは NaN）
+- [ ] 38章の実時間の評価で記録した `(sim 時刻, 壁時計)` から RTF を計算し、評価の run に付ける
+
+### Step 6：自分用の測定手順書（30分）
+
+- [ ] 6節の骨子をもとに `docs/measurement_sop.md` を作る（電源・常駐アプリ・冷却・時計の確認・ログの開始と終了）
+- [ ] 次の測定セッションで、実際にそのチェックリストを使った
+
+### Step 7：仕上げ（10分）
+
+- [ ] 3ファイルの先頭の `from evla._blank import ___` を消し、`ruff check src/evla/analysis/{power,rtf}.py scripts/attach_power.py` を通す
+- [ ] コミットする
 
 ## 6. ベストプラクティス：測定の手順書（SOP）の骨子
 

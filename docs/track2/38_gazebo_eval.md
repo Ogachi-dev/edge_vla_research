@@ -1,9 +1,9 @@
 # track2/38. Gazebo閉ループ評価と、把持閾値の感度分析
 
-> **穴埋め版**（進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
-> - 埋めるファイル（穴の数）：`ros2_ws/src/evla_nodes/evla_nodes/eval_runner.py`（2）、`src/evla/analysis/rejudge.py`（4）
-> - テスト：`pytest tests/analysis/test_rejudge.py`
-> - 「5. 実装手順」は、ゼロから書く場合の手順です。穴埋め版では、手順の中の**確認作業**（動作確認・測定・完了条件）を行い、コードは穴を埋めるだけで足ります。
+> **ハンズオン**（共通の進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - この章で埋める穴：**6個**（`ros2_ws/src/evla_nodes/evla_nodes/eval_runner.py` 2、`src/evla/analysis/rejudge.py` 4）
+> - ゴール：基準（PyTorch FP32）とトラック1の最適設定の Gazebo での成功率（Wilson 区間つき）が出て、閾値の感度曲線と把持精度の ECDF の図がある
+> - 進め方：Step 1 で評価のループを作り、Step 3〜4 を夜に回す。Step 5 の解析の穴（`rejudge.py`）は pytest で先に埋めておける
 
 ## 1. 目的と計画書の対応
 
@@ -21,10 +21,10 @@
 | パス | 役割 |
 | --- | --- |
 | `evla_nodes/eval_runner.py` | 評価のエピソード管理（リセット、タイムアウト、ロックステップ時の推論ループ） |
-| `configs/eval/scenes_v1.yaml` | 評価用の配置の集合（学習に使っていないシード） |
-| `configs/eval/*.yaml` | 評価する設定（モデル、ランタイム、精度、モード） |
+| （配置の集合） | `eval_runner` がシード 900000＋i から配置を作る（学習に使っていないシード。全設定で同じ配置になる） |
+| `configs/policy/so101_*.yaml` | 評価する設定（モデル、ランタイム、精度）。36章 Step 5 で作ったもの |
 | `src/evla/analysis/rejudge.py` | ログからの閾値の再判定 |
-| `scripts/analyze_gazebo_eval.py` | 成功率、失敗の分類、把持のずれの分布、感度曲線 |
+| `scripts/analyze_gazebo_eval.py`（自分で作る） | 成功率、失敗の分類、把持のずれの分布、感度曲線（`rejudge.sensitivity_curve` と `plots.grasp_ecdf_plot` を呼ぶ） |
 | `reports/gazebo_eval.md`、図 | 結果 |
 
 ## 4. インタフェース仕様
@@ -83,13 +83,107 @@ def sensitivity_curve(episodes: pd.DataFrame, scales: Sequence[float]) -> pd.Dat
 - 図：軸ごとの |ずれ| のECDF（設定ごとに線を重ねる）。
 - この図があると、「量子化で、平均的に何mmずれが大きくなったか」を、閾値の選び方に依存せずに示せる。成功率の感度曲線の説明になる。
 
-## 5. 実装手順
+## 5. ハンズオン
 
-1. **eval_runner（3時間）**：34章の `episode_runner` のリセットの手順を再利用する（関数を共通化する）。ロックステップのモードでは、eval_runner自身が「観測を集める → 推論サーバーに問い合わせる → 軌道を送る → n_exec フレーム step する」を繰り返す（時計の所有者が1つになるように）。実時間のモードでは、Gazeboを `-r` で動かし、37章のポリシーノードに任せて、eval_runner はリセットと終了の判定だけを行う。
-2. **評価の配置の生成（30分）**：`scenes_v1.yaml` に50配置を書き出す（33章の `sample_scene` を、学習と別のシードで使う）。
-3. **基準の評価（2時間＋実行時間）**：PyTorch FP32、ロックステップで50エピソード。1エピソードの推論回数×推論時間から実行時間を見積もってから回す。
-4. **各設定の評価（D8、夜間）**：4.1の設定×モード。
-5. **解析（2時間）**：成功率（Wilson区間）、McNemar（基準との対応のある比較）、失敗の分類、把持精度のECDF、感度曲線、RTFと実効制御周期の表。
+各 Step は「**読む → 埋める → 動かす → 確かめる**」の1サイクルです。この章は、これまでの部品（31〜37章）を全部つないで**数字を出す**章です。実行に時間がかかるので、**小さく試してから夜に回す**を守ってください。
+
+### Step 0：準備（5分）
+
+```bash
+grep -n "【穴" ros2_ws/src/evla_nodes/evla_nodes/eval_runner.py src/evla/analysis/rejudge.py
+```
+
+- [ ] 穴6個が表示される
+- [ ] 37章の Step 2（サーバーとクライアント）と Step 5（疎通確認）が済んでいる
+
+### Step 1：評価のループ ― `eval_runner.py`（穴①②、3時間）
+
+**読む**：ファイル冒頭の docstring。ロックステップでは**このノードが時計の所有者**で、「観測を集める → 推論サーバーに問い合わせる → 軌道を送る → n_exec フレーム step する」を繰り返す。実時間では world を動かし、制御は37章のポリシーノードに任せる。リセットは34章の `SimIO.reset_scene` を共有していることも確認する。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | 37章の `InferenceClient.predict` を、今の観測（画像・状態・指示文・sim 時刻）で呼ぶ。world は止まったままなので、推論時間は結果に影響しない |
+| ② | 実時間係数（RTF）＝ sim 時刻の経過 ÷ 壁時計の経過。1 未満なら、シミュレーションが現実より遅い |
+
+**動かす**：まず3エピソードだけ回します。
+
+```bash
+# 端末A（.venv-bench）
+python scripts/serve_policy.py --config configs/policy/torch_fp32.yaml --bind tcp://127.0.0.1:5600 \
+  --image_key_map '{"top": "top", "wrist": "wrist"}'     # SO-101 のモデルの設定に替える
+# 端末B（ROS）
+ros2 launch evla_sim sim.launch.py world:=/tmp/evla_world_0.sdf
+# 端末C（ROS）
+ros2 run evla_nodes eval_runner --ros-args -p use_sim_time:=true -p mode:=lockstep \
+  -p config_name:=smoke -p n_episodes:=3
+```
+
+**確かめる**
+
+- [ ] `[1/3] ok (1/1)` のようなログが3行出る（`ok` でなくても、`grasp_rejected:forward` などの分類が出ればループは動いている）
+- [ ] `results/runs/<run_id>/episodes.jsonl` に3行あり、各行に `events`（把持判定のイベント）が入っている
+- [ ] 1エピソードの所要時間から、50エピソード×設定数の実行時間を見積もる（Step 3〜4 の計画に使う）
+
+### Step 2：評価の配置を確かめる（30分）
+
+`eval_runner` は、シード `900000 + i`（学習のデータ生成と重ならない）から配置を作ります。同じ `i` なら全設定で同じ配置になるので、**対応のある比較**（McNemar）ができます。
+
+```bash
+python -c "
+import numpy as np, yaml
+from evla.planning.randomize import sample_scene
+r = yaml.safe_load(open('configs/datagen/default.yaml'))
+for i in range(3): print(sample_scene(np.random.default_rng(900000 + i), r).cube_xy_m)
+"
+```
+
+- [ ] 何度実行しても同じ3点が出る
+- [ ] 50配置のキューブ位置の散布図を作り、学習データ（34章）の範囲と同じ範囲に散らばっていることを確かめる
+
+### Step 3：基準の評価（2時間＋実行時間）
+
+- [ ] PyTorch FP32、ロックステップ、50エピソード（`-p config_name:=torch_fp32 -p n_episodes:=50`）。Step 1 の見積もりで、その日のうちに終わるか確かめてから回す
+
+### Step 4：各設定の評価（D8、夜間）
+
+- [ ] 4.1節の表の設定×モードを、夜のうちに順に回す（サーバーの `--config` と eval_runner の `config_name` を揃える）
+- [ ] トラック1の最適設定は、**実時間**（`-p mode:=realtime`。37章のポリシーノードを同時に起動）でも回し、RTF と実効制御周期を記録する
+
+### Step 5：解析 ― `rejudge.py`（穴①〜④、2時間）
+
+**読む**：4.3節の「閾値の再判定」。オンラインより**厳しい**閾値だけが判定でき、結果は**下限**（悲観的な推定）になる理由を説明できるようにする。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | `frozen=True` の dataclass は書き換えられない。一部のフィールドだけ変えたコピーを作る `dataclasses` の関数 |
+| ② | どれか1つでも倍率が 1 を超えていれば「緩める方向」＝判定できない（None を返す） |
+| ③ | 厳しくした閾値で、32章の `check_grasp` を同じ幾何量に通した結果 |
+| ④ | pandas で設定ごとに行をまとめる |
+
+**動かす**
+
+```bash
+source .venv-bench/bin/activate
+pytest tests/analysis/test_rejudge.py -v
+```
+
+- [ ] 4つのテストが `PASSED`（scale=1 でオンラインと一致、厳しくすると失敗しうる、緩めると None、曲線が単調）
+
+**解析のスクリプトを作る**：`scripts/analyze_gazebo_eval.py`（自分で作る）で、`results/runs/*_t2_gz-*/episodes.jsonl` を読み、次を `reports/gazebo_eval.md` と図に出します。
+
+- [ ] 成功率（`wilson_ci`）と、基準との McNemar（27章の `stats.py`）
+- [ ] 失敗の分類（`reason` の集計）の表
+- [ ] 感度曲線（`sensitivity_curve`）と、把持精度の ECDF（28章の `plots.grasp_ecdf_plot`）
+- [ ] scale=1.0 での再判定とオンラインの結果を比べ、下限推定の偏りを記録する
+
+### Step 6：仕上げ（10分）
+
+- [ ] 2ファイルの先頭の `from evla._blank import ___` を消し、`ruff check src/evla/analysis/rejudge.py` を通す
+- [ ] コミットする
 
 ## 6. ベストプラクティス
 
