@@ -1,0 +1,5 @@
+runtime: ov
+model: data/models/ov/smolvla-libero-fp16-ov
+device: CPU
+precision: fp32        # 実行精度のヒント（CPU は f32 で計算する。24章 2.2）
+n_threads: 8

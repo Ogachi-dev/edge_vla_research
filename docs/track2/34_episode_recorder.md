@@ -1,5 +1,10 @@
 # track2/34. ロックステップ記録とLeRobotDataset v3への変換
 
+> **ハンズオン**（共通の進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - この章で埋める穴：**36個**（`src/evla/` の `common/stamped_buffer.py` 3、`dataset/conventions.py` 6、`dataset/raw_episode.py` 6、`dataset/quality.py` 5、`dataset/to_lerobot.py` 4、`ros2_ws/src/evla_nodes/evla_nodes/` の `lockstep.py` 4、`sim_io.py` 3、`episode_runner.py` 5）
+> - ゴール：`pytest tests/common/test_stamped_buffer.py tests/dataset` が通り、ロックステップで記録した1エピソードを LeRobotDataset に変換して読み込める。D4 の夜に200エピソード以上を生成する
+> - 進め方：ROS なしの部品（Step 1 前半・Step 2・Step 3）を pytest で固めてから、ROS 側（Step 1 後半・Step 4）に進む
+
 ## 1. 目的と計画書の対応
 
 - Gazeboを**ロックステップ**（pauseして1/30秒ずつstep）で進めながら、画像2枚・関節状態・指令を、同じsim時刻で揃えて記録する。
@@ -37,6 +42,8 @@
 | --- | --- |
 | `ros2_ws/src/evla_nodes/evla_nodes/episode_runner.py` | 時計の所有者。リセット → 区間の実行 → フレームの記録 → 成否の判定 → 保存 |
 | `ros2_ws/src/evla_nodes/evla_nodes/lockstep.py` | `LockstepClock`：pause / multi_step と、指定sim時刻のメッセージが揃うのを待つ処理 |
+| `src/evla/common/stamped_buffer.py` | 時刻つきメッセージのリングバッファ（ROS 非依存。`LockstepClock` が使う） |
+| `ros2_ws/src/evla_nodes/evla_nodes/sim_io.py` | `SimIO`：Gazebo とのやり取り（リセット、指令の送信、1フレーム進めて観測）。`eval_runner`（38章）と共有する |
 | `src/evla/dataset/raw_episode.py` | 生エピソードの書き込み・読み込み（NumPy 1.26でも動く） |
 | `src/evla/dataset/conventions.py` | 関節名の対応、rad→度、グリッパの0〜100への変換 |
 | `src/evla/dataset/to_lerobot.py` | 生エピソード群 → LeRobotDataset v3（`.venv-bench` で実行） |
@@ -120,22 +127,228 @@ def convert(raw_root: Path, out_root: Path, repo_id: str, task_text: str,
 | `thresholds.json` | 把持判定・成功判定の閾値（`grasp.yaml` のコピー） |
 | `generation.json` | 生成コードのgitコミット、日時、生成の成功率と失敗理由の内訳 |
 
-## 5. 実装手順
+## 5. ハンズオン
 
-1. **`LockstepClock`（2〜3時間）**
-   - worldをpauseで起動し（`-r` なし）、`ControlWorld` サービスで `multi_step` を要求する。
-   - 各トピックの最新メッセージを、`stamp` をキーにした小さな辞書（リングバッファ）に溜めておき、`wait_for` で目的のsim時刻のものが揃うまで待つ。
-   - サービスの応答待ちと購読のコールバックが同時に動く必要があるので、`MultiThreadedExecutor` と、Callback Groupの分離を使う（[02](../02_best_practices.md)）。
-   - テスト：100フレーム進めて、`t_sim` の差がすべて1/30秒であること、2つの画像と関節状態の `stamp` が一致することを確かめる。
-2. **episode_runner（3時間）**
-   - リセット：pause → 判定ノードの `~/reset`（detach） → `set_pose` でキューブと箱を配置 → 腕を `q_init` へ（stepしながら。記録しない） → 数フレーム待って静止させる。
-   - 実行：33章の `EpisodePlan` の区間を順に処理する。腕の区間は `/arm_controller/joint_trajectory` に軌道を送り、`step_frame` → `wait_for` → 記録、を軌道の時間が終わるまで繰り返す。
-   - 終了：`wait` 区間の後、判定ノードのイベントから成否を決める。成功なら保存、失敗なら理由を数えて捨てる（イベントは失敗でも別の場所に保存する）。
-3. **生エピソードの書き出し（1時間）**：画像は別スレッドで書く（`cv2.imwrite` の待ちで step が遅れないように）。エピソードの最後にすべての書き込みが終わったことを確認してから、`meta.json` を書く（`meta.json` があるエピソード＝完全なエピソード、とする）。
-4. **変換（2時間）**：`.venv-bench` で `convert()` を実装する。`only_success=True`。
-5. **品質チェック（2時間）**：6節の項目を `quality.py` に実装し、`scripts/check_dataset.py` でレポート（Markdown＋図）を出す。
-6. **一晩の生成（D4の夜）**：33章の頑健化と合わせて、200エピソード以上（成功の目標100〜200）を回す。
-7. **D5の朝**：品質レポートを見て、判定ゲート（[00_schedule](../00_schedule.md)）に臨む。
+各 Step は「**読む → 埋める → 動かす → 確かめる**」の1サイクルです。この章の要は「**時計を持つのは1つのノードだけ**」（4.2節）。world を止めたまま少しずつ進め、そのたびに全トピックが揃うのを待ってから記録します。
+
+### Step 0：準備（10分）
+
+```bash
+source .venv-bench/bin/activate
+grep -n "【穴" src/evla/common/stamped_buffer.py src/evla/dataset/*.py ros2_ws/src/evla_nodes/evla_nodes/{lockstep,sim_io,episode_runner}.py
+pytest tests/common/test_stamped_buffer.py tests/dataset -q     # まだ失敗する
+```
+
+- [ ] 穴36個が表示され、テストが失敗する（穴を通らない1件、`test_wait_until` だけは最初から通る）
+
+### Step 1：時刻つきバッファとロックステップ ― `stamped_buffer.py`（穴①〜③）と `lockstep.py`（穴①〜④）（2〜3時間）
+
+**読む**：4.2節の `LockstepClock`。「pause → `multi_step` で1フレーム分進める → `/clock` が進むのを待つ → 各トピックの、その時刻のメッセージが揃うのを待つ」の流れを図にする。
+
+**埋める**（ROS なし）
+
+| 穴 | ねらい |
+| --- | --- |
+| `stamped_buffer` ① | 順序が前後して届いても、ソート済みを保つ挿入位置（`bisect` の関数） |
+| `stamped_buffer` ② | 候補（前後の2つ）のうち、目的の時刻に近い方を選ぶキー |
+| `stamped_buffer` ③ | `bisect_right` の位置の1つ手前が「t 以下で最新」。手前がなければ None |
+
+```bash
+pytest tests/common/test_stamped_buffer.py -v
+```
+
+- [ ] 4つのテストが `PASSED`
+
+**埋める**（ROS 側）
+
+| 穴 | ねらい |
+| --- | --- |
+| `lockstep` ① | 1フレーム（1/30秒）あたりの物理ステップ数（1/600秒）。直前で整数か確かめている |
+| `lockstep` ② | 購読のコールバックで、`stamp_of(m)` をナノ秒にしてバッファに入れる（`stamp_to_ns` を使う） |
+| `lockstep` ③ | サービスを**非同期で**呼ぶ。同期呼び出しはコールバックの中で使うとデッドロックする |
+| `lockstep` ④ | `ControlWorld` の止めたまま進めるフィールドの値 |
+
+**動かす**：Gazebo を起動し、100フレーム進めて時刻を確かめます。
+
+```bash
+source scripts/ros_env.sh
+cd ros2_ws && colcon build --symlink-install --packages-select evla_nodes && cd .. && source scripts/ros_env.sh
+ros2 launch evla_sim sim.launch.py world:=/tmp/evla_world_0.sdf
+# 別の端末で
+python3 - <<'EOF'
+import threading, numpy as np, rclpy
+from rclpy.executors import MultiThreadedExecutor
+from rclpy.node import Node
+from sensor_msgs.msg import Image, JointState
+from evla_nodes.lockstep import LockstepClock
+
+rclpy.init(); node = Node("lockstep_try")
+ex = MultiThreadedExecutor(); ex.add_node(node); threading.Thread(target=ex.spin, daemon=True).start()
+clk = LockstepClock(node, "evla", 1 / 600, 1 / 30)
+topics = ["/camera/top/image", "/camera/wrist/image", "/joint_states"]
+for tp in topics:
+    clk.track(tp, Image if "camera" in tp else JointState)
+clk.pause()
+ts = []
+for _ in range(100):
+    t = clk.step_frame(); clk.wait_for(t, topics); ts.append(t)
+d = np.diff(ts); print(len(ts), round(d.min(), 6), round(d.max(), 6))
+rclpy.shutdown()
+EOF
+```
+
+**確かめる**
+
+- [ ] `100 0.033333 0.033333`（時刻の差がすべて 1/30 秒）
+- [ ] 途中で `TimeoutError: ... 揃わない: [...]` が出たら、欠けたトピックを `ros2 topic hz` で調べる（7節の落とし穴）
+
+### Step 2：関節名と単位の変換 ― `conventions.py`（穴①〜⑥、1時間）
+
+**読む**：4.1節の `conventions.py`（関節の対応、rad → 度、グリッパの 0〜100）。**記録・変換・ポリシーノードで同じ関数を使う**ことが、37章で「腕が逆方向に動く」事故を防ぎます。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | `names` と `positions` を組にして辞書にする（`dict(zip(...))`） |
+| ② | LeRobot の名前 → URDF の名前（`LEROBOT_TO_URDF`）→ 角度 |
+| ③ | 0〜1 に正規化するときの分母（開きと閉じの差） |
+| ④ | `...`（Ellipsis）を使うと、`(6,)` でも `(T, 6)` でも最後の軸の6番目を指せる |
+| ⑤ | 度 → rad（NumPy の関数） |
+| ⑥ | ステップごとの辞書のリストから、1つの関節の値だけを集めた配列 |
+
+**動かす**
+
+```bash
+pytest tests/dataset/test_conventions.py -v
+```
+
+- [ ] 5つのテストが `PASSED`（特に `test_roundtrip_rad_lerobot_rad`：rad → LeRobot → rad で元に戻る）
+- [ ] `URDF_TO_LEROBOT` の【要確認】を、[env/11](../env/11_ros2_gazebo.md) Step 5 の対応表と照らし合わせた
+
+### Step 3：生エピソードの書き出し ― `raw_episode.py`（穴①〜⑥、1時間）
+
+**読む**：`raw_episode.py` の冒頭の docstring（生エピソードのディレクトリ構成）。画像を**別スレッド**で書く理由（`cv2.imwrite` の待ちで step が遅れないように）と、`meta.json` を**最後に**書く理由（`meta.json` があるエピソード＝完全なエピソード）を確認する。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | `queue.Queue` から1つ取り出す（空なら来るまで待つ） |
+| ② | OpenCV は BGR の順で保存する。RGB から並べ替える `cv2.COLOR_...` の定数 |
+| ③ | 書き込みスレッドが全部書き終わって終了するまで待つ（スレッドのメソッド） |
+| ④ | f-string の書式で6桁ゼロ埋め |
+| ⑤ | JSON Lines：1行に1つの JSON と改行 |
+| ⑥ | `meta.json` を持つディレクトリだけを探す（`Path` のワイルドカード検索） |
+
+**動かす**
+
+```bash
+pytest tests/dataset/test_raw_episode.py -v -k write_and_read
+```
+
+- [ ] `test_write_and_read` が `PASSED`（`meta.json` の無い、途中で落ちたエピソードは一覧に出ない）
+
+### Step 4：1エピソードを記録する ― `sim_io.py`（穴①〜③）と `episode_runner.py`（穴①〜⑤）（3時間）
+
+**読む**：3節の `episode_runner` の役割（リセット → 区間の実行 → 記録 → 成否の判定 → 保存）、4.3節の「行動」の定義、`SimIO.reset_scene` / `step_and_observe` の中身。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| `sim_io` ① | ROS の画像は1行のバイト数が `step`（幅×3 より大きいことがある）。`reshape` で `(高さ, step)` にしてから幅で切る |
+| `sim_io` ② | `ros_gz_interfaces/msg/Entity` の「モデル」を表す定数 |
+| `sim_io` ③ | 記録する action は「コントローラが今追従しようとしている目標」（`controller_state` の reference） |
+| `episode_runner` ① | 区間の長さをカバーするフレーム数（切り上げ） |
+| `episode_runner` ② | エピソードごとのシードから乱数生成器を作る（33章のランダム化に渡す） |
+| `episode_runner` ③ | Step 3 の `RawEpisodeWriter` に1フレーム書き足す |
+| `episode_runner` ④ | イベントの中に `success` が1つでもあるか（`any`） |
+| `episode_runner` ⑤ | サービスの応答待ちの間も購読を受け取れる executor |
+
+**動かす**：33章 Step 5 の `configs/datagen/fixed.yaml`（1エピソード）で記録します。
+
+```bash
+ros2 run evla_nodes episode_runner --ros-args -p use_sim_time:=true \
+  -p datagen_config:=configs/datagen/fixed.yaml -p out_dir:=data/raw/fixed_test -p planner:=interp
+ls data/raw/fixed_test/ep_*/ && cat data/raw/fixed_test/ep_*/meta.json | head -20
+```
+
+**確かめる**
+
+- [ ] `ep_<seed>/` に `top/`・`wrist/`（PNG）、配列の `.npz`、`events.jsonl`、`meta.json` がある
+- [ ] PNG の枚数がフレーム数と同じ。何枚か開いて、色が正しい（赤いキューブが青くない＝②が効いている）
+- [ ] `meta.json` の `success` が `true`（33章の Step 5 と同じ確認）
+
+### Step 5：LeRobotDataset に変換する ― `to_lerobot.py`（穴①〜④、2時間）
+
+**読む**：LeRobot の `LeRobotDataset` のソース（`create`、`add_frame`、`save_episode`、`finalize` の場所）。
+
+```bash
+source .venv-bench/bin/activate
+python -c "import lerobot.datasets.lerobot_dataset as m, inspect; print(inspect.getsourcefile(m))"
+```
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | 画像を mp4 として保存する feature の dtype の名前（公開データの `info.json` を見る） |
+| ② | 空のデータセットを新しく作るクラスメソッド |
+| ③④ | 1フレーム追加 → エピソードとして確定、の2つのメソッド |
+
+**動かす**
+
+```bash
+python scripts/convert_raw_to_lerobot.py --raw data/raw/fixed_test --out data/lerobot/fixed_test --repo_id local/fixed_test
+python -c "
+from lerobot.datasets.lerobot_dataset import LeRobotDataset
+ds = LeRobotDataset('local/fixed_test', root='data/lerobot/fixed_test')
+x = ds[0]; print(len(ds), {k: tuple(v.shape) for k, v in x.items() if hasattr(v, 'shape')})
+"
+ls data/lerobot/fixed_test/meta/evla/
+```
+
+**確かめる**
+
+- [ ] `observation.state`・`action` が `(6,)`、画像が `(3, 480, 640)`。キーと形が公開の SO-101 データと同じ
+- [ ] `meta/evla/` に4.4節の5ファイルがある（足りないものは `TODO(you)`：`cameras.json` など）
+
+### Step 6：品質チェック ― `quality.py`（穴①〜⑤、1.5時間）
+
+**読む**：6節の「品質チェックの項目」。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | 隣り合う時刻の差（NumPy の関数） |
+| ② | すべての間隔が 1/30 秒か（誤差つきの比較を全要素で） |
+| ③ | NaN でも inf でもない要素が True になる関数 |
+| ④ | 画素の平均が閾値より暗い＝黒画像（レンダリングの失敗） |
+| ⑤ | 最後の `last_n` 行の成功率（True/False の平均） |
+
+**動かす**
+
+```bash
+pytest tests/dataset -v
+python scripts/check_dataset.py --raw data/raw/fixed_test --out reports/dataset_quality_fixed.md
+```
+
+- [ ] `tests/dataset` のすべてのテストが `PASSED`（黒画像・フレーム落ちを検出できる）
+- [ ] 品質レポートが書かれ、`fixed_test` に問題がない
+
+### Step 7：一晩の生成と D5 の判定ゲート
+
+- [ ] D4 の夜：`configs/datagen/default.yaml`（`n_episodes` を目標に合わせる）で `episode_runner` を回す。33章の試運転の見積もりで間に合う数にする
+- [ ] D5 の朝：`python scripts/check_dataset.py` でレポートを出し、`gate_summary` の数値（成功数、直近の成功率）を [00_schedule](../00_schedule.md) の判定ゲートに当てはめる
+- [ ] `python scripts/convert_raw_to_lerobot.py` で成功エピソードを変換し、35章に渡す
+
+### Step 8：仕上げ（10分）
+
+- [ ] 8ファイルの先頭の `from evla._blank import ___` を消し、`ruff check src/evla/common src/evla/dataset ros2_ws/src/evla_nodes` を通す
+- [ ] `pytest tests/common/test_stamped_buffer.py tests/dataset` がすべて通る
+- [ ] コミットする
 
 ## 6. ベストプラクティス
 
@@ -191,7 +404,7 @@ while clock.now() < t_end:
 
 ## 9. 完了条件（DoD）
 
-- [ ] `LockstepClock` のテスト（100フレームで時刻の差がすべて1/30秒、各トピックのstampが一致）が通る
+- [ ] 5節 Step 1 の確認（100フレームで時刻の差がすべて1/30秒、各トピックのstampが揃う）ができた
 - [ ] 1エピソードを記録・変換し、`LeRobotDataset` として読み込めて、キーと形が公開データと同じ
 - [ ] `meta/evla/` に4.4の5ファイルがある
 - [ ] 成功エピソード100〜200のデータセットがあり、品質レポートに問題がない（または問題とその対処が書かれている）

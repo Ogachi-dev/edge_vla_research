@@ -1,5 +1,10 @@
 # track1/24. OpenVINOランタイム（CPU / iGPU）とINT8
 
+> **ハンズオン**（共通の進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - この章で埋める穴：**10個**（`src/evla/policy/ov_policy.py` 7、`scripts/ov_download.py` 1、`scripts/ov_inspect.py` 2）
+> - ゴール：OpenVINO 版の SmolVLA が CPU と GPU の両方で推論でき、22章の一致表に OV の行が入る
+> - テスト：モデルが必要なので pytest はなし。各 Step の「動かす」のコマンドで確かめる
+
 ## 1. 目的と計画書の対応
 
 - 公開済みのOpenVINO版SmolVLA（LIBERO学習済み）を `Policy` として包み、CPUとiGPU（Iris Xe）で動かす。
@@ -63,7 +68,7 @@ model.reset()
 | `scripts/ov_download.py` | 3つのOVモデルを `data/models/ov/` に取得する |
 | `scripts/ov_inspect.py` | IRの入出力名・形、演算の種類（乱数演算の有無など）を表示する |
 | `scripts/ov_compress.py`（発展） | NNCFで自分でINT8 / INT4の重み圧縮をする |
-| `tests/policy/test_ov_policy.py` | 形、CPU/GPU両方で動くこと（GPUがなければskip） |
+| （5節 Step 3〜5 のコマンド） | 形、CPU/GPU両方で動くことの確認。専用のテストは作らない |
 
 ## 4. インタフェース仕様
 
@@ -101,20 +106,147 @@ class OVSmolVLA(Policy):
 
 `CACHE_DIR` は OpenVINO 本体の機能です。vla.cpp のOVバックエンドで問題になっている `GGML_OPENVINO_CACHE_DIR`（25章）とは別物ですが、念のため**キャッシュありとなしで行動が一致するか**を22章の指標で確かめます。
 
-## 5. 実装手順
+## 5. ハンズオン
 
-1. **取得と確認（1時間）**
-   - `huggingface_hub.snapshot_download` で3モデルを `data/models/ov/<name>/` に保存する。
-   - `ov_inspect.py`：`ov.Core().read_model("smolvla.xml")` の `inputs` と `outputs`（名前・形・型）を表示する。`get_ordered_ops()` の型名を数え、`RandomUniform` などの乱数演算があるかを確認する。
-   - **ノイズの扱いを決める**：IRにノイズの入力があれば固定ノイズで比較できる。なければ（IR内で乱数を生成していれば）、22章の比較は「同じ観測でN=20回推論した平均どうし」で行う。
-2. **CPUで動かす（1時間）**：`InferenceModel(dir, backend="openvino", device="CPU", PERFORMANCE_HINT="LATENCY")` で固定観測を推論する。
-3. **アダプタの実装（2時間）**：`Observation` → physicalai の観測辞書への変換、`_ov_config`、`describe`。
-4. **GPUで動かす（1時間）**：`device="GPU"` にする。初回のコンパイル時間を別に測って記録する（`CACHE_DIR` ありとなしの両方）。
-5. **一致の確認（1時間）**：22章の `check_equivalence.py` に、OVの各設定（fp16 / bf16 / w8a16 × CPU / GPU）の行を追加する。
-6. **閉ループの確認（1時間）**：23章と同じ簡易ループで1エピソード成功させる。
-7. **（発展）自前の重み圧縮**：`nncf.compress_weights` で、FP16のIRから INT8_SYM / INT8_ASYM / INT4_SYM の重み圧縮版を作り、公開版（w8a16）と比較する。
+各 Step は「**読む → 埋める → 動かす → 確かめる**」の1サイクルです。
 
-**入力条件（視点数・解像度）の掃引について**：OVのIRは入力の形が固定されている可能性が高いです。1視点や256pxの実験をOVで行うには、`physicalai-train` で設定を変えて書き出し直す必要があります（36章の手順を流用）。**【判断】** トラック1では、入力条件の掃引は PyTorch と vla.cpp で行い、OVは精度×デバイス×スレッドに絞る。時間があれば書き出し直しも試す。
+### Step 0：準備（5分）
+
+```bash
+source .venv-bench/bin/activate
+grep -n "【穴\|【要確認】" src/evla/policy/ov_policy.py scripts/ov_download.py scripts/ov_inspect.py
+python -c "import openvino as ov; print(ov.__version__, ov.Core().available_devices)"
+```
+
+- [ ] 穴10個が表示され、デバイスに `GPU` が含まれる（無ければ [env/10](../env/10_wsl2_and_igpu.md) Step 3）
+
+### Step 1：モデルを取得する ― `scripts/ov_download.py`（穴①、20分）
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | `huggingface_hub` で、リポジトリのファイルを**全部**取ってくる関数（1ファイルだけ取る関数もあるので区別する） |
+
+**動かす**
+
+```bash
+python scripts/ov_download.py
+```
+
+- [ ] 3つのリポジトリについて、`.xml` と `.bin`、`manifest.json` などが並ぶ
+
+### Step 2：IR の中身を見る ― `scripts/ov_inspect.py`（穴①②、30分）
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | IR を読むだけ（まだコンパイルしない）。`ov.Core()` のメソッドを使う。コンパイルとの違い（デバイスに載せるかどうか）を意識する |
+| ② | 演算の型名の出現回数を数える。`most_common` が使えるクラス |
+
+**動かす**
+
+```bash
+ls data/models/ov/smolvla-libero-fp16-ov/*.xml
+python scripts/ov_inspect.py data/models/ov/smolvla-libero-fp16-ov/<上で見つけた>.xml | tee results/smoke/ov_inspect.txt
+```
+
+**確かめる**
+
+- [ ] 入力に画像（2視点）・状態・トークンなどが並ぶ。**形が固定か（`?` や `-1` がないか）**を見る（固定なら、視点数や解像度は変えられない）
+- [ ] `== 乱数演算:` の行を見て、**ノイズの扱いを決める**。乱数演算があれば固定ノイズは渡せないので、22章の比較は「同じ観測でN=20回推論した平均どうし」で行う。決めたことを `docs/decisions.md` に残す
+
+### Step 3：CPU で動かす ― `ov_policy.py` の穴①〜⑥（1時間）
+
+**読む**：4節の「主なcompile config」の表。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | 辞書を `key=value` のキーワード引数として展開して渡す Python の構文 |
+| ② | OpenVINO の性能ヒント。バッチ1で最短の応答を狙う方（もう1つは throughput） |
+| ③ | CPU のスレッド数のプロパティ名（表を見る） |
+| ④ | NumPy でバッチ次元を足す（23章の `unsqueeze(0)` の NumPy 版）。インデックスに書ける特別な値がある |
+| ⑤ | 指示文を長さ1のリストにする |
+| ⑥ | `actions.shape` をそのまま2つの変数に分ける |
+
+**動かす**
+
+```bash
+python - <<'EOF'
+from pathlib import Path
+from evla.common.config import load_config
+from evla.policy.base import PolicyConfig
+from evla.policy.factory import make_policy
+from evla.sim.fixed_obs import load_fixed_obs
+
+obs = load_fixed_obs(Path("data/fixed_obs/libero_object_t0.npz"))[0]
+with make_policy(load_config(Path("configs/policy/ov_cpu_fp16.yaml"), PolicyConfig)) as p:
+    p.warmup(obs)
+    r = p.predict_chunk(obs)
+    print(r.actions.shape, round(r.latency_ms, 1), "ms", p.chunk_size, p.action_dim)
+EOF
+```
+
+**確かめる**
+
+- [ ] `(50, 7)` と推論時間が表示される。23章の PyTorch（同じスレッド数）と比べてメモに残す
+- [ ] 22章の Step 5 で `--test configs/policy/ov_cpu_fp16.yaml` を足し、`max_abs` が目安（FP32どうしで1e-4〜1e-3）に収まるか確かめる
+
+### Step 4：describe で「実際に何で動いたか」を残す ― 穴⑦（20分）
+
+設定に書いた値と、OpenVINO が実際に使った値は違うことがあります（例：GPU に `f32` を頼んでも `f16` で動く）。結果ファイルには**実際の値**を残します。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ⑦ | デバイスの正式名（`Intel(R) Iris(R) Xe Graphics` など）を表すプロパティ名 |
+
+**動かす**：Step 3 のコードの最後に `import pprint; pprint.pprint(p.describe())` を足して実行する。
+
+- [ ] `full_device_name` と、`EXECUTION_DEVICES`・`INFERENCE_PRECISION_HINT`・`INFERENCE_NUM_THREADS` が表示される
+- [ ] これらが `None` なら、`_find_compiled_model` の【要確認】（physicalai の内部の属性名）を、`print(vars(p.model))` で調べて直す
+
+### Step 5：GPU で動かす（1時間）
+
+```bash
+rm -rf data/ov_cache
+for i in 1 2; do
+  python -c "
+from pathlib import Path; import time
+from evla.common.config import load_config
+from evla.policy.base import PolicyConfig
+from evla.policy.ov_policy import OVSmolVLA
+from evla.sim.fixed_obs import load_fixed_obs
+obs = load_fixed_obs(Path('data/fixed_obs/libero_object_t0.npz'))[0]
+p = OVSmolVLA(load_config(Path('configs/policy/ov_gpu_fp16.yaml'), PolicyConfig))
+t = time.perf_counter(); p.predict_chunk(obs); first = time.perf_counter() - t
+print('load_s=%.1f first_infer_s=%.1f' % (p.load_s, first), p.describe().get('EXECUTION_DEVICES'))
+"
+done
+```
+
+**確かめる**
+
+- [ ] `EXECUTION_DEVICES` に `GPU` が出る（`CPU` なら GPU で動いていない）
+- [ ] 1回目（キャッシュなし）と2回目（`data/ov_cache` あり）の `load_s` を記録する。2回目が大きく短くなる
+- [ ] 22章の一致表に `ov_gpu_fp16` の行を足す。キャッシュありとなしで行動が変わらないことも確かめる
+
+### Step 6：閉ループと、残りの組み合わせ（1〜2時間）
+
+- [ ] 23章 Step 4 の簡易ループで、設定ファイルを `configs/policy/ov_cpu_fp16.yaml` に替えて1エピソード成功させる
+- [ ] bf16 / w8a16 のモデル（`model:` を替えた設定ファイルを自分で作る）× CPU / GPU を、22章の一致表に足す
+- [ ] （発展）`nncf.compress_weights` で、FP16 の IR から INT8_SYM / INT8_ASYM / INT4_SYM の重み圧縮版を作り、公開版（w8a16）と比べる
+
+**入力条件（視点数・解像度）の掃引について**：OVのIRは入力の形が固定されている可能性が高いです（Step 2 で確認）。1視点や256pxの実験をOVで行うには、`physicalai-train` で設定を変えて書き出し直す必要があります（36章の手順を流用）。**【判断】** トラック1では、入力条件の掃引は PyTorch と vla.cpp で行い、OVは精度×デバイス×スレッドに絞る。時間があれば書き出し直しも試す。
+
+### Step 7：仕上げ（10分）
+
+- [ ] 3ファイルの先頭の `from evla._blank import ___` を消し、`ruff check src/evla/policy/ov_policy.py scripts/ov_*.py` を通す
+- [ ] コミットする
 
 ## 6. ベストプラクティス
 

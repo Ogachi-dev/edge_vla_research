@@ -1,5 +1,10 @@
 # track2/35. SmolVLAのファインチューニング（RTX PRO 6000）
 
+> **ハンズオン**（共通の進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - この章に穴埋めはありません。学習コマンド（4.1節の雛形の `TODO(you)`）を自分で決め、学習を回して記録します
+> - 自分で書くもの：`configs/train/smolvla_so101_v1.sh`（4.1節）、`scripts/offline_action_eval.py`（4.2節。任意だが、チェックポイントを選ぶ根拠になる）
+> - ゴール：学習の記録（データの版・所要時間・損失曲線）があり、選んだチェックポイントをエッジの `TorchSmolVLA` で読み込める
+
 ## 1. 目的と計画書の対応
 
 - 34章のデータセットで `lerobot/smolvla_base` をファインチューニングし、Gazebo SO-101用の方策を作る。
@@ -82,17 +87,83 @@ def eval_checkpoint(ckpt: Path, dataset_root: Path, episode_ids: Sequence[int],
     関節ごとのMSE[deg²]、グリッパの開閉の一致率を返す。"""
 ```
 
-## 5. 実装手順
+## 5. ハンズオン
 
-1. **学習機の準備（1時間）**
-   - エッジ側と**同じ版のLeRobot**を入れる（チェックポイントの互換性のため）。torchは学習機のGPU（Blackwell）に合うCUDA版にする。
-   - `nvidia-smi` で GPU を確認する。
-2. **データの転送（30分）**：`rsync -avP data/lerobot/so101_pickplace_v1/ <学習機>:...`。HFのHubに非公開でpushする方法もある。どちらの場合も、**データの版（ファイルのハッシュ、またはHubのコミット）を記録する**。
-3. **短い試運転（30分）**：`--steps=200` で回し、損失が下がり始めること、チェックポイントが保存されることを確認する。この時点で、1ステップの時間から全体の所要時間を見積もる。
-4. **本番の学習（数時間）**：D5の昼に開始する。wandbで損失を監視する。
-5. **チェックポイントの評価（1時間）**：5k、10k、15k、20kの各チェックポイントで `offline_action_eval.py` を回す。
-6. **エッジへのコピー（30分）**：選んだチェックポイントの `pretrained_model/` をエッジの `data/models/` にコピーする。23章の `TorchSmolVLA` で読み込めることを確かめる（`cfg.model` にローカルパスを渡す）。
-7. **37章の推論サーバー経由で、Gazeboで1エピソード回す**（D8で本格的に評価する）。
+各 Step は「**実行する → 出力を確かめる → `docs/notes/train_v1.md` に記録する**」の1サイクルです。学習は学習機（RTX PRO 6000）、確認はエッジ（この端末）で行います。
+
+### Step 1：学習機の準備（1時間）
+
+- エッジ側と**同じ版のLeRobot**を入れる（チェックポイントの互換性のため）。torchは学習機のGPU（Blackwell）に合うCUDA版にする。
+
+```bash
+nvidia-smi
+python -c "import torch, lerobot; print(torch.__version__, torch.cuda.is_available(), torch.cuda.get_device_name(0), lerobot.__version__)"
+```
+
+**確かめる**
+
+- [ ] GPU 名と、`True`、LeRobot の版が表示される。版がエッジの `requirements/bench.lock.txt` と同じ
+
+### Step 2：データの転送（30分）
+
+```bash
+rsync -avP data/lerobot/so101_pickplace_v1/ <学習機>:<置き場所>/so101_pickplace_v1/
+find data/lerobot/so101_pickplace_v1 -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum   # データの版
+```
+
+HF の Hub に非公開で push する方法もあります。どちらの場合も、**データの版（ファイルのハッシュ、または Hub のコミット）を記録**します。
+
+- [ ] 学習機側でも同じコマンドでハッシュを計算し、一致した
+
+### Step 3：短い試運転（30分）
+
+4.1節の雛形を `configs/train/smolvla_so101_v1.sh` に写し、`TODO(you)` を決めます（`lerobot-train --help` で引数名を確かめる）。まず `--steps=200` で回します。
+
+```bash
+bash configs/train/smolvla_so101_v1.sh --steps=200 --save_freq=200 --output_dir=outputs/train/smoke
+ls outputs/train/smoke/checkpoints/
+```
+
+**確かめる**
+
+- [ ] 損失が下がり始めている（wandb かログで）
+- [ ] チェックポイントが保存される（`pretrained_model/` に `config.json`・`model.safetensors`・前処理の設定がある）
+- [ ] 1ステップの時間から、本番（20k ステップ）の所要時間を見積もってメモに残した
+
+### Step 4：本番の学習（数時間、D5の昼に開始）
+
+```bash
+bash configs/train/smolvla_so101_v1.sh
+```
+
+- [ ] wandb で損失を監視している。開始時刻・コミット・データの版・GPU を `docs/notes/train_v1.md` に書いた
+
+### Step 5：チェックポイントの評価（1時間）
+
+`scripts/offline_action_eval.py`（4.2節）で、5k・10k・15k・20k の各チェックポイントの行動の誤差を、取り分けたエピソードで計算します。
+
+- [ ] チェックポイントごとの関節別 MSE と、グリッパの開閉の一致率の表がある
+- [ ] 使うチェックポイントと、選んだ理由を記録した
+
+### Step 6：エッジで読み込む（30分）
+
+選んだチェックポイントの `pretrained_model/` を、エッジの `data/models/smolvla_so101_v1/` にコピーし、23章の `TorchSmolVLA` で読み込みます（`cfg.model` にローカルパスを渡す）。
+
+```bash
+source .venv-bench/bin/activate
+python -c "
+from evla.policy.base import PolicyConfig
+from evla.policy.torch_policy import TorchSmolVLA
+p = TorchSmolVLA(PolicyConfig(runtime='torch', model='data/models/smolvla_so101_v1/pretrained_model', views=('top', 'wrist')))
+print(p.chunk_size, p.action_dim)
+"
+```
+
+- [ ] `50 6` が表示される（SO-101 は6関節）
+
+### Step 7：Gazebo で1エピソード回す（D8で本格的に評価する）
+
+- [ ] 37章の推論サーバー（`--image_key_map '{"top": "top", "wrist": "wrist"}'`）経由で、Gazebo で1エピソード回し、腕がキューブに向かって動く
 
 ## 6. ベストプラクティス
 

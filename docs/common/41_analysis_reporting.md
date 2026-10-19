@@ -1,5 +1,10 @@
 # common/41. 図表・Jetsonへの外挿・外部推論との比較・報告書
 
+> **ハンズオン**（共通の進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - この章で埋める穴：**4個**（`src/evla/analysis/extrapolate.py` 2、`scripts/netem/setup.sh` 2）
+> - ゴール：`pytest tests/analysis/test_extrapolate_rtf.py` が通り、`scripts/make_all_figures.sh` 1本で全図表を作り直せて、報告書が4.3節の構成で書かれている
+> - 進め方：まとめの章。穴は少なく、**これまでの結果を1本のスクリプトと1つの報告書にまとめる**作業が中心
+
 ## 1. 目的と計画書の対応
 
 - 成果物（図表と報告書）の形を先に決め、データから自動で生成できるようにする。
@@ -122,13 +127,83 @@ sudo ip link set veth1 netns remote
 8. 結論と次の一手
 9. 付録：再現手順、設定ファイル、一致の表、品質レポート
 
-## 5. 実装手順
+## 5. ハンズオン
 
-1. **図表スクリプトの統合（2時間）**：28章・38章・40章の図を `make_all_figures.sh` 1本で作れるようにする。
-2. **Jetsonへの外挿（2時間）**：`extrapolate.py`、外挿の表と、遅延許容曲線にJetsonの推定点を重ねた図。
-3. **外部推論の比較（任意、D9、半日）**：仮想時間方式で4.2の条件を回す → netemで1条件を確認する。
-4. **報告書（D10）**：4.3の構成で書く。数値はすべて生成された表から引用する（手で転記しない）。
-5. **再現性の確認（1時間）**：新しいシェルで `make_all_figures.sh` を実行して、同じ図が出ることを確認する。
+各 Step は「**埋める／作る → 動かす → 確かめる**」の1サイクルです。報告書の数値は、**すべて生成された表から引用**します（手で転記しない）。
+
+### Step 0：準備（5分）
+
+```bash
+grep -n "【穴" src/evla/analysis/extrapolate.py scripts/netem/setup.sh
+ls reports/
+```
+
+- [ ] 穴4個が表示される
+- [ ] 28章・38章・40章で作った表と図が `reports/` にある
+
+### Step 1：図表スクリプトの統合（2時間）
+
+`scripts/make_all_figures.sh`（自分で作る）に、28章の `make_report_tables.py`、38章の `analyze_gazebo_eval.py`、40章の電力の集計を順に並べます。
+
+```bash
+bash scripts/make_all_figures.sh
+ls -la reports/
+```
+
+- [ ] 3節の表の図表（ベンチマーク表、パレート図、遅延許容曲線、閾値の感度、把持精度の ECDF）が全部できる
+
+### Step 2：Jetson への外挿 ― `extrapolate.py`（穴①②、2時間）
+
+**読む**：4.1節の外挿の考え方（「Jetson のレイテンシ（公開値や推定値）を、この端末で測った遅延許容曲線に当てはめる」。曲線の外は外挿しない）。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | `n_exec` と `mode` の両方が一致する行。pandas の論理積は `&` で、各条件を括弧で囲む |
+| ② | 遅延が曲線の測定範囲（最小〜最大）の内側か。外なら NaN を返して「範囲外」を明示する |
+
+**動かす**
+
+```bash
+source .venv-bench/bin/activate
+pytest tests/analysis/test_extrapolate_rtf.py -v
+```
+
+- [ ] 3つのテストが `PASSED`（区間の内側は線形補間、外側や存在しない `n_exec` は NaN）
+- [ ] `extrapolation_table` で、Jetson（Orin Nano / AGX Orin など）の推定レイテンシと推定成功率・区間・前提の表を作り、`make_all_figures.sh` に足す
+
+### Step 3：外部推論の比較（任意、D9、半日） ― `scripts/netem/setup.sh`（穴①②）
+
+まず仮想時間方式（27章の `ConstantLatency`）で4.2節の条件を回し、そのあと netem で1条件だけ実際の通信で確かめます。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | `ip link set` で、veth の片側を別のネットワーク名前空間に移す指定 |
+| ② | `tc qdisc ... netem` で、遅延とそのゆらぎ（`$DELAY`、`$JITTER`）を与える指定 |
+
+**動かす**
+
+```bash
+sudo bash scripts/netem/setup.sh 50ms 10ms 1%
+ping -c 5 10.200.0.2
+sudo bash scripts/netem/teardown.sh
+```
+
+- [ ] `ping` の往復が約 50ms ±ゆらぎになる（netem は veth0 から**出る**向きにだけかかるので、遅延は片道ぶん）
+- [ ] 行わなかった場合は、その理由を報告書に書く
+
+### Step 4：報告書（D10）
+
+- [ ] `reports/report.md` を4.3節の構成で書く。数値は `reports/` の表から引用する
+- [ ] 計画書の問い（どの条件なら、何Hzで、どの程度の成功率か、パレート境界はどこか）に、1節ずつ答えている
+
+### Step 5：再現性の確認（1時間）
+
+- [ ] 新しいシェルで `bash scripts/make_all_figures.sh` を実行し、同じ図が出る
+- [ ] `extrapolate.py` の先頭の `from evla._blank import ___` を消し、コミットする
 
 ## 6. ベストプラクティス
 

@@ -1,0 +1,5 @@
+runtime: ov
+model: data/models/ov/smolvla-libero-fp16-ov
+device: GPU
+precision: fp16
+extra: {CACHE_DIR: data/ov_cache}

@@ -1,5 +1,10 @@
 # track2/31. Gazeboシーン：world・物体・カメラ・TCP・衝突マスク・bridge
 
+> **ハンズオン**（共通の進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - この章で埋める穴：**16個**（`ros2_ws/src/evla_sim/` の `CMakeLists.txt` 1、`config/bridge.yaml` 3、`config/controllers.yaml` 1、`urdf/so101_evla.urdf.xacro` 4、`worlds/evla_pickplace.sdf.jinja` 1、`scripts/render_world.py` 3、`launch/sim.launch.py` 3）
+> - ゴール：`ros2 launch evla_sim sim.launch.py` 1本で、ロボット・机・箱・キューブ・2カメラが起動し、`/grasp/state` で attach / detach を操作できる
+> - テスト：ROS と Gazebo が必要なので pytest はなし。各 Step の「動かす」のコマンドで確かめる。**穴のほかに `TODO(you)`（TCP とカメラの位置）を実測で決める**
+
 ## 1. 目的と計画書の対応
 
 - SO-101のpick&place用のGazeboシーン（机、キューブ、箱、カメラ2台、TCPフレーム、DetachableJoint）を作り、ROSとつなぐ。
@@ -36,8 +41,7 @@ ros2_ws/src/evla_sim/
 │   ├── bridge.yaml                      # ros_gz_bridge
 │   ├── scene.yaml                       # 寸法・配置範囲・カメラ（世界の唯一の正）
 │   └── grasp.yaml                       # 把持判定の閾値（32章）
-├── worlds/evla_pickplace.sdf.jinja      # world のテンプレート（見た目のランダム化用）
-├── models/{table,box,cube}/model.sdf
+├── worlds/evla_pickplace.sdf.jinja      # world のテンプレート（机・箱・キューブ・上方カメラもこの中に直接書く）
 ├── launch/sim.launch.py
 └── scripts/render_world.py              # scene.yaml＋乱数 → world SDF を生成
 ```
@@ -76,7 +80,7 @@ appearance_ranges:                              # 33章の「見た目の多様�
   <xacro:include filename="$(find lerobot_description)/urdf/so101_ros2_control.xacro"/>
   <!-- so101_gazebo.xacro は include しない（コントローラYAMLのパスを差し替えるため） -->
 
-  <!-- TCP：両爪先端の中間（閉じた状態）。値は5節 Step 3 で求める -->
+  <!-- TCP：両爪先端の中間（閉じた状態）。値は5節 Step 5 で求める -->
   <link name="tcp"/>
   <joint name="tcp_joint" type="fixed">
     <parent link="gripper"/><child link="tcp"/>
@@ -97,7 +101,7 @@ appearance_ranges:                              # 33章の「見た目の多様�
   </gazebo>
 
   <!-- 衝突マスク：爪とキューブだけ衝突しないようにする（4.4） -->
-  <!-- TODO(you): gripper / jaw の collision に collide_bitmask を設定する方法を確かめる（【要確認】5節 Step 4） -->
+  <!-- TODO(you): gripper / jaw の collision に collide_bitmask を設定する方法を確かめる（【要確認】5節 Step 6） -->
 
   <gazebo>
     <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
@@ -163,46 +167,187 @@ SDFの `collide_bitmask` は、**2つのcollisionのビットANDが0なら衝突
 - 内部：`fx = fy = (W / 2) / tan(hfov / 2)`、`cx = W / 2`、`cy = H / 2`（正方画素、歪みなし）。**【要確認】** Gazeboが出す `camera_info` の値と照合し、`(W-1)/2` などの違いがないか確かめる。
 - 外部：Gazeboのカメラ座標系は**X前方・Y左・Z上**で、OpenCVの光学座標系（**Z前方・X右・Y下**）と違う。メタデータには両方の規約を明記し、OpenCV規約に変換した値も保存する。
 
-## 5. 実装手順
+## 5. ハンズオン
 
-### Step 1：パッケージとlaunchの骨組み（1時間）
+各 Step は「**読む → 埋める → 動かす → 確かめる**」の1サイクルです。この章は**ROS 側のシェル**（`source scripts/ros_env.sh`。venv は使わない）で作業します。穴を埋めたら `colcon build` し直すのを忘れないでください（`--symlink-install` でも、CMakeLists や新しいファイルの追加では必要）。
 
-1. `ros2 pkg create evla_sim --build-type ament_cmake`。`urdf config worlds models launch scripts` を `share` にインストールする。
-2. `sim.launch.py`：lerobot_wsの `so101_gazebo.launch.py` を参考に（コピーではなく理解して）、world と URDF を自分のものに差し替える。
-3. `controllers.yaml`：lerobot_wsのものをコピーし、`update_rate: 300` にする。
+### Step 0：準備（10分）
 
-### Step 2：world と物体（2時間）
+```bash
+cd ~/01_PhysicalAI-Applied-Course-1/10_Final-Assignment/edge_vla_research
+source scripts/ros_env.sh
+grep -rn "【穴\|TODO(you)\|【要確認】" ros2_ws/src/evla_sim
+ros2 pkg prefix lerobot_description          # env/11 の lerobot_ws が見えるか
+```
 
-1. `models/cube/model.sdf`：リンク名 `cube_link`、慣性はキューブの公式（`I = m·s²/6`）で計算する。collisionに `collide_bitmask 0x02` を設定する。PosePublisherを付ける。
-2. `models/box/model.sdf`：底板＋4枚の壁（薄い直方体）。内寸は `scene.yaml` から生成する。
-3. world：Physics（`max_step_size`）、UserCommands、SceneBroadcaster、Sensors（`render_engine` は ogre2）の各systemと、光源、地面、机、箱、キューブを置く。
-4. `render_world.py`：`scene.yaml` と乱数シードから、Jinjaテンプレートで world SDF を作る（光の強さ、カメラの微小なずれ、机の色など）。
+- [ ] 穴16個と TODO(you) が表示される
+- [ ] `lerobot_description` の場所が表示される（見えなければ [env/11](../env/11_ros2_gazebo.md) の Step 3）
 
-### Step 3：TCPの位置を求める（1〜2時間）
+### Step 1：パッケージをビルドできるようにする ― `CMakeLists.txt`（穴①）と `controllers.yaml`（穴①）（30分）
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| `CMakeLists.txt` ① | このパッケージはファイルを置くだけ。`share/evla_sim/` に入れるディレクトリを並べる（`ls ros2_ws/src/evla_sim` で何があるか見る） |
+| `controllers.yaml` ① | 制御周期。物理（600Hz）の約数で、カメラ・記録（30Hz）の倍数にすると、ステップの境界がずれない |
+
+**動かす**
+
+```bash
+cd ros2_ws && colcon build --symlink-install --packages-select evla_sim && cd ..
+source scripts/ros_env.sh
+ls $(ros2 pkg prefix evla_sim)/share/evla_sim/
+```
+
+- [ ] `config launch scripts urdf worlds` が並ぶ
+
+### Step 2：world を生成する ― `render_world.py`（穴①〜③）と `evla_pickplace.sdf.jinja`（穴①）（1.5時間）
+
+**読む**：4.1節の `scene.yaml`（寸法の唯一の正）と、テンプレートの中身（`{{ ... }}` に何が入るか）。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| `render_world.py` ① | 一様な立方体の慣性モーメント（式はヒントにある）。慣性がでたらめだと、掴んだときに暴れる |
+| `render_world.py` ② | 壁の中心の位置。すぐ下の `wall_yn` と符号だけが違う |
+| `render_world.py` ③ | Jinja の設定。テンプレートの変数名を打ち間違えたとき、黙って空文字にせずエラーにする |
+| `.sdf.jinja` ① | `set_pose` などのサービスを提供する system のファイル名。上下の行（`gz-sim-...-system`）の命名規則に合わせる |
+
+**動かす**
+
+```bash
+python3 ros2_ws/src/evla_sim/scripts/render_world.py --seed 0 --out /tmp/evla_world_0.sdf
+python3 ros2_ws/src/evla_sim/scripts/render_world.py --seed 1 --out /tmp/evla_world_1.sdf
+gz sdf -k /tmp/evla_world_0.sdf && diff /tmp/evla_world_0.sdf /tmp/evla_world_1.sdf | head
+gz sim /tmp/evla_world_0.sdf                    # 目で見る（ロボットはまだいない）
+```
+
+**確かめる**
+
+- [ ] `gz sdf -k` が `Valid.` を出す
+- [ ] seed 0 と 1 で、光の強さ・机の色・キューブの色・上方カメラの位置だけが違う
+- [ ] Gazebo で、机・箱（底と4枚の壁）・キューブ・上方カメラが見える
+
+### Step 3：URDF とブリッジ ― `so101_evla.urdf.xacro`（穴①〜④）と `bridge.yaml`（穴①〜③）（1時間）
+
+**読む**：4.2節（URDF の雛形）と4.3節（ブリッジ）。lerobot_ws のリンク名を確かめる。
+
+```bash
+xacro $(ros2 pkg prefix lerobot_description)/share/lerobot_description/urdf/so101.urdf.xacro | grep "<link name"   # 【要確認】ファイル名は実物に合わせる
+```
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| URDF ① | TCP を付ける親リンク。上の `grep` で見たリンク名から、爪の固定側が付いているものを選ぶ（下の DetachableJoint の `parent_link` と同じ） |
+| URDF ② | URDF → SDF の変換では、固定関節でつながったリンクが1つにまとめられる。センサの付いたリンクが消えないようにする |
+| URDF ③ | カメラの周期（30Hz、sim 時刻） |
+| URDF ④ | world に置いたキューブのモデル名（テンプレートの `<model name="...">`） |
+| bridge ① | Gazebo 側の画像の型名。すぐ上の上方カメラの行と同じ |
+| bridge ② | 向き。attach / detach は ROS から Gazebo へ送る |
+| bridge ③ | Gazebo の文字列メッセージの型名（`gz.msgs.String` ではない。`gz msg --list \| grep -i string` で調べる） |
+
+**動かす**
+
+```bash
+cd ros2_ws && colcon build --symlink-install --packages-select evla_sim && cd .. && source scripts/ros_env.sh
+xacro $(ros2 pkg prefix evla_sim)/share/evla_sim/urdf/so101_evla.urdf.xacro > /tmp/so101.urdf
+check_urdf /tmp/so101.urdf | head -20
+gz sdf -p /tmp/so101.urdf | grep -n "wrist_camera\|tcp"
+```
+
+- [ ] `check_urdf` がエラーなしでリンクの木を表示し、`tcp` と `wrist_camera_link` が `gripper` の下にある
+- [ ] SDF に変換しても `wrist_camera` のセンサが残っている（②が効いている）
+
+### Step 4：launch で全部を起動する ― `sim.launch.py`（穴①〜③）（1時間）
+
+**読む**：lerobot_ws の `so101_gazebo.launch.py`（**コピーではなく理解して**、何を差し替えたかを確認する）。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | `robot_description` は URDF の文字列。`ParameterValue` に型を指定しないと、YAML として解釈しようとして失敗することがある |
+| ② | `ros_gz_sim create` に、robot_state_publisher が出している URDF のトピックから読ませる引数（`create --help` で見る） |
+| ③ | spawn のプロセスが**終わったら**コントローラを起動する。`OnProcessExit(target_action=..., on_exit=...)` |
+
+**動かす**
+
+```bash
+cd ros2_ws && colcon build --symlink-install && cd .. && source scripts/ros_env.sh
+ros2 launch evla_sim sim.launch.py world:=/tmp/evla_world_0.sdf
+# 別の端末で（source scripts/ros_env.sh してから）
+ros2 control list_controllers
+ros2 topic list | grep -E "camera|grasp|cube|clock"
+```
+
+**確かめる**
+
+- [ ] Gazebo にロボットが現れ、`joint_state_broadcaster`・`arm_controller`・`gripper_controller` の3つが `active`
+- [ ] `/camera/{top,wrist}/{image,camera_info}`、`/grasp/{attach,detach,state}`、`/model/cube/pose`、`/clock` がある
+
+### Step 5：TCP の位置を求める（`TODO(you)`、1〜2時間）
 
 1. RViz で `gripper` と `jaw` を表示し、グリッパを閉じた状態（関節6を閉じ側の限界）にする。
 2. `.venv-bench` で `trimesh` を使い、爪のメッシュ（STL）を読み込む。リンク座標系での爪の先端（最も遠い頂点群）の座標を求め、両爪の先端の中点を計算する。
-3. その値を `tcp_joint` の `origin` に書き、RVizでTCPの座標軸が爪の間に表示されることを目視で確かめる。
-4. TCP座標系の軸の向きを決めて記録する（例：Z＝接近方向、Y＝爪の開閉方向）。**この規約は32章の判定で使う**。
+3. その値を `tcp_joint` の `origin` に書き、ビルドし直して起動する。
 
-### Step 4：衝突マスクの確認（1〜2時間）
+```bash
+ros2 run tf2_ros tf2_echo gripper tcp          # 書いた値が出るか
+ros2 run tf2_ros tf2_echo tcp jaw              # 閉じた状態で、爪の先端との距離が小さいか
+```
 
-1. URDFの `<gazebo reference="gripper">` で、collisionの `collide_bitmask` を設定できるか試す。`xacro ... > /tmp/so101.urdf && gz sdf -p /tmp/so101.urdf` でSDFに変換し、`collide_bitmask` が入っているか確認する。
-2. 入らない場合は、SDFに変換してから編集する方式（`render_world.py` でSDFを後処理する）に切り替える。
-3. 動作確認：グリッパを開いた状態でキューブの真上から降ろし、**爪がキューブをすり抜け、キューブは机の上に残る**ことを確かめる。
+- [ ] RViz で、TCP の座標軸が閉じた爪の間に表示される（目視）。`tf2_echo` の値をメモに残す
+- [ ] TCP 座標系の軸の向き（例：Z＝接近方向、Y＝爪の開閉方向）を決めて `docs/decisions.md` に記録する。**この規約は32章の判定で使う**
 
-### Step 5：カメラ（1.5時間）
+### Step 6：衝突マスクを確かめる（`TODO(you)`、1〜2時間）
 
-1. 上方カメラはworldに固定、手首カメラはURDFの `wrist_camera_link` に付ける。
-2. `ros2 run rqt_image_view rqt_image_view` で2つの画像を確認する。
-3. `ros2 topic hz /camera/top/image` が30Hz（sim時刻）で、`camera_info` の `K` が4.5の式と合うことを確かめる。
-4. カメラ付きのRTFを測り、記録する（計画書の基準：0.5未満ならロックステップを主体にする）。
+1. URDF の `<gazebo reference="gripper">` で、collision の `collide_bitmask` を設定できるか試す。
+2. `gz sdf -p /tmp/so101.urdf | grep -n collide_bitmask` で、SDF に入っているか確認する。
+3. 入らない場合は、SDF に変換してから編集する方式（`render_world.py` で SDF を後処理する）に切り替える。
 
-### Step 6：DetachableJointとサービス（1時間）
+- [ ] グリッパを開いた状態でキューブの真上から降ろすと、**爪がキューブをすり抜け、キューブは机の上に残る**
+- [ ] キューブは机と箱とは衝突する（箱に落とすと中に留まる）
 
-1. 起動直後の状態が `attached` であることを `ros2 topic echo /grasp/state` で確かめる。
-2. `ros2 topic pub --once /grasp/detach std_msgs/msg/Empty {}` で外し、`detached` になることを確かめる。
-3. `set_pose` サービスでキューブを移動できることを確かめる。
+### Step 7：カメラと RTF（1.5時間）
+
+```bash
+ros2 run rqt_image_view rqt_image_view          # 2つの画像を見る
+ros2 topic hz /camera/top/image                  # sim 時刻で 30Hz
+ros2 topic echo --once /camera/top/camera_info | grep -A1 "^k:"
+gz topic -e -t /stats -n 3 | grep real_time_factor
+```
+
+- [ ] 両カメラの画像が見え、手首カメラの向きが自然（`TODO(you)`：実機の取り付け位置に近い値を `wrist_camera_joint` に書く）
+- [ ] `camera_info` の `K` が4.5節の式（`fx = (W/2) / tan(hfov/2)`、`cx = W/2`）と合う。違えば差をメモに残す
+- [ ] カメラ付きの RTF を記録する（計画書の基準：0.5未満ならロックステップを主体にする）
+
+### Step 8：DetachableJoint とサービス（1時間）
+
+```bash
+ros2 topic echo --once /grasp/state                                 # 起動直後
+ros2 topic pub --once /grasp/detach std_msgs/msg/Empty {}
+ros2 topic echo --once /grasp/state                                 # 外した後
+ros2 service call /world/evla/set_pose ros_gz_interfaces/srv/SetEntityPose \
+  "{entity: {name: cube, type: 2}, pose: {position: {x: 0.2, y: 0.0, z: 0.05}}}"
+ros2 service call /world/evla/control ros_gz_interfaces/srv/ControlWorld "{world_control: {pause: true}}"
+ros2 service call /world/evla/control ros_gz_interfaces/srv/ControlWorld "{world_control: {multi_step: 20}}"
+```
+
+**確かめる**
+
+- [ ] 起動直後は `attached`、detach の後は `detached`
+- [ ] `set_pose` でキューブが (0.2, 0, 0.05) に移動する
+- [ ] pause で止まり、`multi_step: 20` で 20 ステップだけ進む（`/clock` が 20/600 秒だけ進む）。34章のロックステップの土台になる
+
+### Step 9：仕上げ（10分）
+
+- [ ] `render_world.py` と `sim.launch.py` の先頭の `from evla._blank import ___` を消す
+- [ ] TCP・カメラの値と、衝突マスクの方式を `docs/decisions.md` に残した
+- [ ] コミットする
 
 ## 6. ベストプラクティス
 
@@ -216,7 +361,7 @@ SDFの `collide_bitmask` は、**2つのcollisionのビットANDが0なら衝突
 | 症状 | 原因 | 対処 |
 | --- | --- | --- |
 | 起動直後、キューブが腕と一緒に浮く | DetachableJointは起動時に接続済み | エピソード開始時、腕を動かす前に detach する |
-| キューブがはじけ飛ぶ | 初期状態でキューブと爪が重なっている（DARTの制約）。衝突マスクが効いていない | キューブの初期位置を爪から離す。Step 4で確認する |
+| キューブがはじけ飛ぶ | 初期状態でキューブと爪が重なっている（DARTの制約）。衝突マスクが効いていない | キューブの初期位置を爪から離す。5節 Step 6で確認する |
 | 手首カメラが表示されない | 固定関節の統合（lumping）でリンクが消え、センサが行方不明になった | `preserveFixedJoint`。またはセンサを `gripper` に直接付け、姿勢で位置を調整する |
 | DetachableJointが `child model not found` | ロボットのspawn時点でキューブが存在しない | キューブはworld SDFに入れておく（後からspawnしない） |
 | カメラ画像が真っ黒 | Sensors systemがない、またはrender engineが使えない | worldに `gz-sim-sensors-system` を入れる。ogre2が駄目ならogreを試す |

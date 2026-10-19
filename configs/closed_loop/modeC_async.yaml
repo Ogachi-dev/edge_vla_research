@@ -1,0 +1,6 @@
+# 遅延許容曲線：--set latency.ms=... と --set executor.n_exec=... を変えて回す
+policy: {runtime: torch, model: HuggingFaceVLA/smolvla_libero, n_threads: 8}
+executor: {mode: async, n_exec: 25, async_threshold: 10}
+latency: {type: constant, ms: 500}
+task_ids: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+episodes_per_task: 5

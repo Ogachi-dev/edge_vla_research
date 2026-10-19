@@ -1,5 +1,10 @@
 # track1/21. LIBEROの導入と環境ラッパ
 
+> **ハンズオン**（共通の進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - この章で埋める穴：**14個**（`src/evla/sim/libero_env.py` 9、`src/evla/sim/fixed_obs.py` 2、`scripts/libero_smoke.py` 2、`scripts/dump_fixed_obs.py` 1）
+> - ゴール：LIBERO が描画付きで動き、`data/fixed_obs/libero_object_t0.npz`（N≥20）ができる
+> - テスト：LIBERO が必要なので pytest はなし。各 Step の「動かす」のコマンドで確かめる
+
 ## 1. 目的と計画書の対応
 
 - WSL2上でLIBERO（MuJoCo）を動かし、**ランタイムに依存しない統一形式の観測**を返す薄いラッパを作る。
@@ -94,11 +99,22 @@ def quat_xyzw_to_axis_angle(q: npt.NDArray[np.float64]) -> npt.NDArray[np.float6
 | `task` | `()` str | |
 | `sim_step` | `(N,)` int | 取得したステップ |
 
-## 5. 実装手順
+## 5. ハンズオン
 
-### Step 1：描画バックエンドの確認（30分〜2時間）
+各 Step は「**読む → 埋める → 動かす → 確かめる**」の1サイクルです。この章のコードには **【要確認】**（LeRobot の版で変わりうる行）が多いので、穴を埋める前に、実物の観測のキーを一度見ておくのがコツです。
 
-1. `.venv-bench` で、次の順に試す。成功したものを `scripts/bench_env.sh` に書いておく。
+### Step 0：準備（5分）
+
+```bash
+source .venv-bench/bin/activate
+grep -n "【穴\|【要確認】" src/evla/sim/{libero_env,fixed_obs}.py scripts/{libero_smoke,dump_fixed_obs}.py
+```
+
+- [ ] 穴14個と【要確認】の行が表示される。【要確認】の行は Step 3 で実物と照らし合わせる
+
+### Step 1：描画バックエンドを選ぶ（30分〜2時間）
+
+次の順に試し、動いたものを `scripts/bench_env.sh`（自分で作る）に `export MUJOCO_GL=...` として書いておきます。
 
 | 順 | 設定 | 備考 |
 | --- | --- | --- |
@@ -106,9 +122,15 @@ def quat_xyzw_to_axis_angle(q: npt.NDArray[np.float64]) -> npt.NDArray[np.float6
 | 2 | `MUJOCO_GL=glfw` | WSLgのディスプレイ（`DISPLAY`）を使う。ウィンドウは開かなくてよい |
 | 3 | `MUJOCO_GL=osmesa` | CPUでのソフトウェア描画。確実に動くが遅く、**推論とCPUを取り合う** |
 
-2. 各設定で、256×256の2カメラを100ステップ描画する時間を測り、メモに残す。
+```bash
+for gl in egl glfw osmesa; do
+  echo "== $gl"; MUJOCO_GL=$gl python -c "import mujoco; m = mujoco.MjModel.from_xml_string('<mujoco/>'); r = mujoco.Renderer(m, 256, 256); print('ok')"
+done
+```
 
-### Step 2：LeRobotの評価コマンドで素の動作を確認（1時間）
+- [ ] どの設定で `ok` が出たかをメモに残す（描画速度は Step 5 のスモークテストで測る）
+
+### Step 2：LeRobot の評価コマンドで「正解の挙動」を見る（1時間）
 
 ```bash
 lerobot-eval --policy.path=HuggingFaceVLA/smolvla_libero --env.type=libero \
@@ -116,26 +138,138 @@ lerobot-eval --policy.path=HuggingFaceVLA/smolvla_libero --env.type=libero \
   --policy.device=cpu --output_dir=results/smoke/lerobot_eval
 ```
 
-- 動画が出力され、成功するかを確認する（CPUなので数分かかる）。**これが「正解の挙動」の基準**になる。
-- **【要確認】** `--policy.device` などの引数名は、`lerobot-eval --help` で確認する。
+- [ ] `results/smoke/lerobot_eval/` に動画が出力され、成功している（CPUなので数分かかる）。**これが以降の基準**になる
+- [ ] 引数でエラーになったら `lerobot-eval --help` で名前を確かめる（**【要確認】**）
 
-### Step 3：`LiberoTaskEnv` の実装（2時間）
+### Step 3：軸角の変換 ― `libero_env.py` の穴①〜④（30分）
 
-1. LeRobotの `LiberoEnv` を `obs_type="pixels_agent_pos"` で作る（suite は `libero.libero.benchmark` から取得する。LeRobotの `create_libero_envs` の実装を読むと手順が分かる）。
-2. `reset()` / `step()` の生の観測から `Observation` を作る。
-   - 画像を180°回転する（`img[::-1, ::-1]`）。**回転後は `np.ascontiguousarray` で連続メモリにする**（後段のtorchやprotobufが、負のストライドを扱えない）。
-   - 状態は `[eef_pos, quat_xyzw_to_axis_angle(eef_quat), gripper_qpos]` を連結する。
-3. 行動の範囲チェック、`max_steps` での打ち切りを実装する。
+LIBERO の状態は、手先の姿勢をクォータニオンで持っています。方策の入力は軸角（3次元）なので変換します。
 
-### Step 4：一致テスト（1時間）
+**読む**：4節の `quat_xyzw_to_axis_angle`。クォータニオン `(x, y, z, w) = (sin(θ/2)·軸, cos(θ/2))` の関係を紙に書く。
 
-- 同じ生の観測を、自作の変換と LeRobot の `LiberoProcessorStep` の両方に通し、画像は完全一致、状態は `atol=1e-6` で一致することを確かめる。
+**埋める**
 
-### Step 5：スモークテストと固定観測の保存（1時間）
+| 穴 | ねらい |
+| --- | --- |
+| ① | 成分の並び順。LIBERO（robosuite）は `xyzw` の順。`wxyz` の順を使うライブラリもあり、取り違えが典型的なバグ |
+| ② | `w` から `sin(θ/2)` を求める。丸め誤差で負にならないよう、外側で `max(0, …)` している |
+| ③ | 回転がほぼ0だと軸が定まらず、0 で割ってしまう。その手前で止める（しきい値は 1e-8 程度の小さな値） |
+| ④ | `w = cos(θ/2)` を θ について解く |
 
-1. `scripts/libero_smoke.py`：ランダム行動で1エピソード回し、`render_frame` で動画（mp4）を保存する。
-2. `scripts/dump_fixed_obs.py`：Step 2で成功したエピソードを、PyTorchのSmolVLAで（[23](23_runtime_pytorch.md) の完成後に）回しながら、10ステップごとに観測を保存する（N=20〜30）。
-   - 23章が未完成なら、ランダム行動で保存しておき、後で差し替える。画像の中身は推論時間にほとんど影響しないが、**行動の数値比較には実際の観測が必要**。
+**動かす**（LIBERO がなくても確かめられる）
+
+```bash
+python -c "
+import numpy as np
+from evla.sim.libero_env import quat_xyzw_to_axis_angle as f
+print(f(np.array([0, 0, np.sin(np.pi/4), np.cos(np.pi/4)])))   # z 軸まわり 90°
+print(f(np.array([0, 0, 0, 1.0])))                              # 回転なし
+print(f(np.array([1.0, 0, 0, 0])))                              # x 軸まわり 180°
+"
+```
+
+- [ ] 1行目が `[0. 0. 1.5708...]`（π/2）、2行目が `[0. 0. 0.]`、3行目が `[3.1415... 0. 0.]`
+
+### Step 4：環境ラッパ ― `libero_env.py` の穴⑤〜⑨（1.5時間）
+
+**読む**：4節の `LiberoTaskEnv` と、LeRobot の `create_libero_envs` の実装（スイートの作り方が分かる）。
+
+```bash
+python -c "import lerobot.envs.libero as m, inspect; print(inspect.getsourcefile(m))"   # ソースの場所
+```
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ⑤ | LIBERO の `benchmark` モジュールで、スイート名からスイートのクラスを引く辞書を得る |
+| ⑥ | 学習データの画像は180°回転している。NumPy のスライスだけで回転できる（コピーなし＝負のストライド。だから外側で連続メモリにしている） |
+| ⑦ | 位置(3)・軸角(3)・グリッパ(2) を1本の (8,) にする |
+| ⑧ | 範囲外の行動は、クリップで隠さず例外にする（方策のバグを早く見つけるため）。誤差を少し許す |
+| ⑨ | gymnasium の API。戻り値が5つ（`terminated` と `truncated` が分かれている）ことに注意 |
+
+**動かす**：まず生の観測のキーを見て、【要確認】の行（`raw["pixels"][key]`、`raw["robot_state"]`）が合っているか確かめます。
+
+```bash
+export MUJOCO_GL=egl    # Step 1 で選んだもの
+python -c "
+from evla.sim.libero_env import LiberoConfig, LiberoTaskEnv
+import numpy as np
+env = LiberoTaskEnv(LiberoConfig())
+raw, _ = env._env.reset(seed=0); print('raw keys:', list(raw.keys()))
+obs = env.reset(seed=0)
+print(env.task, obs.state.shape, {k: (v.shape, v.flags['C_CONTIGUOUS']) for k, v in obs.images.items()})
+try:
+    env.step(np.full(7, 1.5, np.float32))
+except ValueError as e:
+    print('ValueError OK:', e)
+env.close()
+"
+```
+
+**確かめる**
+
+- [ ] `raw keys` が【要確認】の行と合っている（合っていなければ、その行を実物に合わせて直す）
+- [ ] 指示文、`(8,)`、両カメラが `((256, 256, 3), True)` と表示される
+- [ ] 範囲外の行動で `ValueError OK:` が表示される
+
+**一致の確認**：同じ生の観測を、自作の変換と LeRobot の前処理（`LiberoProcessorStep`。**【要確認】** 名前と場所は版による）の両方に通し、画像は完全一致、状態は `atol=1e-6` で一致することを、Python で1回確かめてメモに残します（モデルが要らないので、上のコマンドに数行足せば書けます）。
+
+### Step 5：スモークテスト ― `scripts/libero_smoke.py`（穴①②、30分）
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | 乱数の作り方。`np.random.default_rng` の Generator のメソッドを使う（グローバルな `np.random.*` は使わない） |
+| ② | `imageio` で画像のリストを mp4 にする関数 |
+
+**動かす**
+
+```bash
+for gl in egl glfw osmesa; do MUJOCO_GL=$gl python scripts/libero_smoke.py --steps 100; done
+```
+
+**確かめる**
+
+- [ ] `100 steps, xx.x ms/step（描画込み）` が表示される。設定ごとの値をメモに残す（9節の1つ目）
+- [ ] `results/smoke/libero_random.mp4` を再生すると、ロボットがランダムに動いている（向きが上下逆でない）
+
+### Step 6：固定観測セット ― `fixed_obs.py`（穴①②）と `scripts/dump_fixed_obs.py`（穴①）（30分）
+
+推論時間の測定（26章）と、ランタイム間の一致の確認（22章）で、全ランタイムに**同じ観測**を入れるためのファイルを作ります。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| `fixed_obs.py` ① | `(H, W, 3)` の配列 N 個を、新しい軸で積んで `(N, H, W, 3)` にする |
+| `fixed_obs.py` ② | `.npz` を開く関数。`with` で使うと、ファイルが確実に閉じられる |
+| `dump_fixed_obs.py` ① | ステップ番号が `every` の倍数のときだけ保存する |
+
+**動かす**
+
+```bash
+python scripts/dump_fixed_obs.py --suite libero_object --task 0 --n 25
+python -c "
+from pathlib import Path
+from evla.sim.fixed_obs import load_fixed_obs
+obs = load_fixed_obs(Path('data/fixed_obs/libero_object_t0.npz'))
+print(len(obs), obs[0].task, obs[0].state.dtype, [o.sim_step for o in obs[:5]])
+"
+```
+
+**確かめる**
+
+- [ ] `saved 25 observations → data/fixed_obs/libero_object_t0.npz`
+- [ ] 読み込むと `25 <指示文> float32 [0, 10, 20, 30, 40]` のように、10ステップおきの観測が戻る
+- [ ] 23章が終わったら、`--policy configs/policy/torch_fp32.yaml` を付けて**実際の観測で作り直す**（行動の数値比較には実際の観測が必要。推論時間にはほとんど影響しない）
+
+### Step 7：仕上げ（10分）
+
+- [ ] 4ファイルの先頭の `from evla._blank import ___` を消し、`ruff check src/evla/sim scripts/libero_smoke.py scripts/dump_fixed_obs.py` を通す
+- [ ] 【要確認】の行を直した場合は、どう直したかを `docs/decisions.md` に1行残す
+- [ ] コミットする
 
 ## 6. ベストプラクティス
 
@@ -182,7 +316,7 @@ return array([x, y, z]) / den * angle
 
 - [ ] 使う `MUJOCO_GL` と、その描画速度がメモにある
 - [ ] `lerobot-eval` でSmolVLAが `libero_object` タスク0を1回成功させた動画がある
-- [ ] `pytest tests/sim/test_libero_obs.py` が通る（`LiberoProcessorStep` との一致）
+- [ ] 5節 Step 4 の一致の確認（`LiberoProcessorStep` との一致）の結果がメモにある
 - [ ] `data/fixed_obs/libero_object_t0.npz` がある（N≥20）
 - [ ] 範囲外の行動を `step` に渡すと `ValueError` になる
 

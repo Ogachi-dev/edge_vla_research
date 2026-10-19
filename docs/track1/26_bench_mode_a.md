@@ -1,5 +1,10 @@
 # track1/26. モードA：単体ベンチ（計時・統計・メモリ）
 
+> **ハンズオン**（共通の進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - この章で埋める穴：**16個**（`src/evla/bench/` の `timing.py` 6、`memory.py` 4、`mode_a.py` 5、`scripts/bench_mode_a.py` 1）
+> - ゴール：`pytest tests/bench` が通り、`scripts/bench_mode_a.py` で PyTorch CPU のスレッド数別の結果が `results/runs/` にたまる
+> - 進め方：Step 1〜2 はモデルなしでできる。Step 3 以降は23章（と25章）が動いている前提
+
 ## 1. 目的と計画書の対応
 
 - 推論だけを繰り返して、**レイテンシの分布・起動時間・メモリ**を正しく測る基盤を作る。
@@ -21,9 +26,8 @@
 | `src/evla/bench/timing.py` | `Stopwatch`、`summarize_latencies()` |
 | `src/evla/bench/memory.py` | `PeakRssMonitor`：別スレッドで任意のPIDのRSSを監視する |
 | `src/evla/bench/mode_a.py` | `run_mode_a(cfg) -> RunResult`：1設定×1プロセス分の測定 |
-| `src/evla/bench/schema.py` | 結果の列定義（Parquetのスキーマ） |
 | `scripts/bench_mode_a.py` | 1設定を測るCLI（28章のスイープから子プロセスとして呼ばれる） |
-| `configs/bench/*.yaml` | 設定例（torch_cpu_t8.yaml など） |
+| `configs/bench/*.yaml` | 設定例（`torch_cpu.yaml`、`vlacpp_cpu.yaml`、掃引の基準の `base.yaml`） |
 | `tests/bench/test_timing.py` | 統計関数のテスト、`sleep` を使った計時の健全性テスト |
 
 ## 4. インタフェース仕様
@@ -86,18 +90,148 @@ class PeakRssMonitor:
 
 `config.yaml` と `env.json`（[01](../01_repository_design.md)）に加え、`summary.json` に `RunResult` を保存します。
 
-## 5. 実装手順
+## 5. ハンズオン
 
-1. **計時と統計（1時間）**：`Stopwatch` と `summarize_latencies` を実装し、テストする（`[1,2,3,4]` のp50＝2.5、`sleep(0.02)` が約20ms、など）。
-2. **メモリ監視（1時間）**：`PeakRssMonitor` を実装する。テストでは、大きな配列を確保して解放するプロセスのピークが、確保量と同程度になることを確かめる。
-3. **`run_mode_a`（2時間）**
-   - 順序：環境変数の設定 → 監視開始 → （vlacppなら）サーバー起動 → `make_policy` → 読み込み時間の記録 → ウォームアップ → 計測ループ → 保存。
-   - スレッド関連の環境変数（`OMP_NUM_THREADS`、`VLA_N_THREADS` など）は、**ライブラリのimport前**に設定する必要がある。そのため `run_mode_a` は**新しいプロセスで実行する**前提にする（28章のスイープが `subprocess` で呼ぶ）。
-4. **CLI（30分）**：`scripts/bench_mode_a.py --config configs/bench/torch_cpu_t8.yaml [--set policy.n_threads=4]`
-5. **ベースラインの測定（1時間）**：PyTorch CPUで、スレッド数を 1/2/4/8/12/16 にして各50回測る。
-6. **P/Eコアの実験（1時間、[env/10](../env/10_wsl2_and_igpu.md) の結論に従う）**
-   - vCPUに速い群があった場合：`taskset -c <速い群>` と `taskset -c <遅い群>` で同じ設定を測る。
-   - なかった場合：`.wslconfig` の `processors=8` と `16` を比べるか、Windowsネイティブでの測定に回す。
+各 Step は「**読む → 埋める → 動かす → 確かめる**」の1サイクルです。この章で作るものは、以降のすべての数値の土台になります。**測り方そのものを疑う**つもりで確かめてください。
+
+### Step 0：準備（5分）
+
+```bash
+source .venv-bench/bin/activate
+grep -n "【穴" src/evla/bench/{timing,memory,mode_a}.py scripts/bench_mode_a.py
+pytest tests/bench -q          # まだ失敗する
+```
+
+- [ ] 穴16個が表示され、テストが `NotImplementedError` で失敗する
+
+### Step 1：計時と統計 ― `timing.py`（穴①〜⑥、45分）
+
+**読む**：4節の `summarize_latencies` と、6節の「p99 を出す条件」。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | 複数のパーセンタイルを1回で求める NumPy の関数。リストで `[50, 90, 95, 99]` を渡せる |
+| ② | 母集団の標準偏差（n で割る）と、標本の標準偏差（n−1 で割る）の違い |
+| ③ | サンプルが少ないと、上位1%に1点も入らず p99 ≒ 最大値になる。何点以上なら出してよいか（定数がファイルの上にある） |
+| ④ | 変動係数。平均の大きさが違う設定どうしで、ばらつきを比べられる |
+| ⑤ | 計時に使う時計。壁時計（`time.time`）は NTP の補正で戻ることがある。単調増加でナノ秒の整数を返す方 |
+| ⑥ | 単位の変換。1 ms は何 ns か |
+
+**動かす**
+
+```bash
+pytest tests/bench/test_timing.py -v -k "summary or p99 or stopwatch"
+python -c "
+from evla.bench.timing import summarize_latencies as s
+import pprint; pprint.pprint(s([1, 2, 3, 4]))
+"
+```
+
+**確かめる**
+
+- [ ] 3つのテストが `PASSED`
+- [ ] `p50: 2.5`、`p99: nan`（n=4 < 100）、`std` が約 1.29（n−1 で割った値。n で割ると 1.118）
+
+### Step 2：メモリの監視 ― `memory.py`（穴①〜④、45分）
+
+**読む**：`cat /proc/self/status | grep -E "VmRSS|VmHWM"` を実行して、行の形を見る。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | `'VmRSS:   12345 kB'` から数字だけを取り出す（`split()` は連続した空白をまとめて区切る） |
+| ② | 「今」の常駐メモリのキー（`VmHWM` はカーネルが記録しているピークで、終了時の照合に使う） |
+| ③ | これまでのピークと今の値（kB → MB）の大きい方 |
+| ④ | `threading.Event` の `wait(timeout)` は、待つ（sleep の代わり）と同時に、止められたかどうかを返す。`sleep` だと止めるのに最大 interval だけ遅れる |
+
+**動かす**
+
+```bash
+pytest tests/bench/test_timing.py -v -k peak_rss
+```
+
+**確かめる**
+
+- [ ] `test_peak_rss_sees_allocation` が `PASSED`（50MB の確保が、ピークに 30MB 以上の増加として見える）
+- [ ] 5秒考える：別スレッドで 0.05 秒ごとに見る方式は、何を取りこぼしうるか（だから `VmHWM` とも照合する）
+
+### Step 3：1設定の測定 ― `mode_a.py`（穴①〜⑤、1.5時間）
+
+**読む**：4節の `ModeAConfig` と `samples.parquet` の列。`run_mode_a` の順序（設定の保存 → 監視開始 → サーバー起動 → 方策の読み込み → ウォームアップ → 計測 → 保存）を確認する。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | `ExitStack`：with 文を動的に（条件付きで）積み重ねる道具。抜けるときは**積んだ逆順**に後片付けされる（方策 → 監視 → サーバー） |
+| ② | 固定観測を順番に使い回す。添字が観測の数を超えないようにする |
+| ③ | ウォームアップを捨てずに、負の番号で残す（`-3, -2, -1, 0, 1, …`）。後から「何回目で安定したか」を見られる |
+| ④ | pandas の DataFrame を Parquet で保存するメソッド |
+| ⑤ | `is_warmup` が False の行。pandas の真偽の列を反転する演算子 |
+
+### Step 4：CLI から動かす ― `scripts/bench_mode_a.py`（穴①、20分）
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | 環境変数を設定する辞書。**torch を import する前**に設定しないと効かない（だから `main` の中で、重い import より先に呼んでいる） |
+
+**動かす**
+
+```bash
+python scripts/bench_mode_a.py --config configs/bench/torch_cpu.yaml --set n_measure=20
+ls results/runs/ | tail -1
+RUN=results/runs/$(ls results/runs | tail -1)
+ls $RUN; python -c "
+import pandas as pd; df = pd.read_parquet('$RUN/samples.parquet')
+print(df[['iter', 'is_warmup', 'obs_index', 'latency_ms', 'vcpu']].head(6))
+print(df.filter(like='bd_').columns.tolist())
+"
+```
+
+**確かめる**
+
+- [ ] `<run_id>: p50=...ms p90=...ms load=...s rss=...MB` が1行表示される
+- [ ] run のディレクトリに `config.yaml`、`env.json`、`samples.parquet`、`summary.json`、`artifacts/` がある
+- [ ] `iter` が `-3, -2, -1, 0, 1, 2`、`is_warmup` が最初の3行だけ True、`obs_index` が 0, 1, 2, … と進む
+- [ ] `bd_preprocess_ms` などの内訳の列がある
+- [ ] `env.json` の `thread_env` に `OMP_NUM_THREADS: "8"` が入っている（④が効いている証拠）
+
+### Step 5：ベースラインを測る（1時間）
+
+PyTorch CPU で、スレッド数を変えて各50回測ります。
+
+```bash
+for n in 1 2 4 8 12 16; do
+  python scripts/bench_mode_a.py --config configs/bench/torch_cpu.yaml --set policy.n_threads=$n --tag threads
+done
+python -c "
+import json, glob
+for p in sorted(glob.glob('results/runs/*_t1_modeA_*/summary.json')):
+    d = json.load(open(p)); print(d['describe'].get('num_threads'), round(d['summary']['p50'], 1), round(d['summary']['cv'], 3))
+"
+```
+
+- [ ] スレッド数ごとの p50 と cv が並ぶ。p50 とスレッド数のグラフを作る（28章の `plots.py` ができるまでは手で作ってよい）
+- [ ] 同じ設定（例：8スレッド）を**3プロセス**で測り、p50 の変動係数を確認する（6節）
+- [ ] vla.cpp でも1回測る：`python scripts/bench_mode_a.py --config configs/bench/vlacpp_cpu.yaml`。`summary.json` の `peak_rss_server_mb` に値が入っている
+
+### Step 6：P/Eコアの実験（1時間、[env/10](../env/10_wsl2_and_igpu.md) の結論に従う）
+
+- vCPUに速い群があった場合：`taskset -c <速い群> python scripts/bench_mode_a.py ...` と `taskset -c <遅い群> ...` で同じ設定を測る。`env.json` の `cpu_affinity` に指定が残っていることを確かめる。
+- なかった場合：`.wslconfig` の `processors=8` と `16` を比べるか、Windowsネイティブでの測定に回す。
+
+- [ ] どちらにしたかと、その結論をメモに残す
+
+### Step 7：仕上げ（10分）
+
+- [ ] 4ファイルの先頭の `from evla._blank import ___` を消し、`ruff check src/evla/bench scripts/bench_mode_a.py` を通す
+- [ ] `pytest tests/bench` がすべて通る
+- [ ] コミットする
 
 ## 6. ベストプラクティス
 

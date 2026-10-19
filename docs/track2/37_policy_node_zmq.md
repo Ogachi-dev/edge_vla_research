@@ -1,5 +1,10 @@
 # track2/37. ROS 2ポリシーノードとZeroMQ IPC
 
+> **ハンズオン**（共通の進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - この章で埋める穴：**21個**（`src/evla/ipc/` の `protocol.py` 6、`client.py` 4、`server.py` 4、`scripts/serve_policy.py` 1、`ros2_ws/src/evla_nodes/evla_nodes/` の `action_mapping.py` 3、`policy_node.py` 3）
+> - ゴール：`pytest tests/ipc` が通り、Gazebo 上でポリシーノード →（ZeroMQ）→ 推論サーバーのループが回って、RTT・実効制御周期・キュー枯渇が記録される
+> - 進め方：Step 1〜2 は pytest とシェル2つ（`.venv-bench` とシステム Python）でできる。Step 3 以降は ROS 側
+
 ## 1. 目的と計画書の対応
 
 - ROS（システムPython）と推論（`.venv-bench`）を**別プロセス**に分け、ZeroMQでつなぐ。
@@ -22,7 +27,7 @@
 | `src/evla/ipc/protocol.py` | メッセージの定義とエンコード（**NumPy 1.26でも2でも動く**こと） |
 | `src/evla/ipc/client.py` | `InferenceClient`（タイムアウトと再接続つき） |
 | `src/evla/ipc/server.py` | `InferenceServer`：22章の `Policy` を包む（`.venv-bench` で動かす） |
-| `scripts/serve_policy.py` | サーバーの起動CLI（`--config configs/policy/so101_ov_cpu.yaml`） |
+| `scripts/serve_policy.py` | サーバーの起動CLI（`--config configs/policy/so101_ov_cpu.yaml` など。SO-101 用の設定ファイルは36章 Step 5 で自分で作る） |
 | `evla_nodes/policy_node.py` | 実時間モードのポリシーノード |
 | `evla_nodes/eval_runner.py` | 評価のエピソード管理。ロックステップのときは時計の所有者として推論ループも回す（38章） |
 | `evla_nodes/action_mapping.py` | 方策の出力（度、LeRobotの順序）→ コントローラの指令（rad、URDFの関節名） |
@@ -122,14 +127,151 @@ flowchart LR
 | キュー枯渇の回数・時間 | 非同期で行動がなくなった時間 |
 | 破棄した行動数 | k の合計 |
 
-## 5. 実装手順
+## 5. ハンズオン
 
-1. **プロトコル（1.5時間）**：`encode` / `decode` と往復テスト。uint8画像とfloat32配列、空の配列、非連続配列（転置したもの）を試す。
-2. **サーバーとクライアント（2時間）**：`.venv-bench` でサーバーを、別のシェル（システムPython）でクライアントを動かし、固定観測で往復させる。サーバーを途中で殺して、クライアントがタイムアウト→再接続できることを確かめる。
-3. **関節の対応（1時間）**：`action_mapping.py`。度→rad、LeRobotの順序→URDFの名前、符号。34章の `conventions.py` と同じ対応表を使い、**変換を往復させて恒等になる**ことをテストする。
-4. **ポリシーノード（3時間）**：4.2の図のとおり。推論はスレッドで行い、ROSのコールバックをブロックしない。軌道の時刻は `time_from_start = (i + 1) / control_hz`。
-5. **疎通確認（D7、1〜2時間）**：計画書のとおり、まず**LIBEROのモデル**で動かす。行動の次元（7）とロボット（6）が合わないので、先頭6次元を使うなどの仮の対応で、ループが回ることだけを確かめる（成功率は問わない）。推論の遅延、実効制御周期、キュー枯渇が記録されることを確認する。
-6. **SO-101のモデルで動かす（D8）**：36章の変換結果を、トラック1の最適設定で動かす。
+各 Step は「**読む → 埋める → 動かす → 確かめる**」の1サイクルです。この章の要は**プロセスの分離**です。推論（`.venv-bench`、NumPy 2）と ROS ノード（システム Python、NumPy 1.26）は同じプロセスに入れられないので、ZeroMQ でつなぎます（[01](../01_repository_design.md)）。
+
+### Step 0：準備（5分）
+
+```bash
+source .venv-bench/bin/activate
+grep -n "【穴" src/evla/ipc/*.py scripts/serve_policy.py ros2_ws/src/evla_nodes/evla_nodes/{action_mapping,policy_node}.py
+pytest tests/ipc -q          # まだ失敗する
+```
+
+- [ ] 穴21個が表示され、テストが失敗する
+
+### Step 1：プロトコル ― `protocol.py`（穴①〜⑥、1.5時間）
+
+**読む**：4.1節のメッセージの形（ヘッダ＝msgpack の辞書、配列＝生のバイト列のフレーム）。なぜ pickle を使わないか（NumPy 1.26 と 2 の間で互換性がない／安全でない）を確認する。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | 転置などで**非連続**になった配列は、生のバイト列の並びが形と合わない。連続にしてから送る |
+| ② | 受け側で同じ型に戻すため、エンディアンを含む型の文字列（`'<f4'` など）を送る。dtype の属性 |
+| ③ | 大きな画像をコピーせずに送るため、配列のバッファをそのまま参照する組み込み型 |
+| ④⑤ | msgpack の「辞書 → バイト列」と「バイト列 → 辞書」の関数 |
+| ⑥ | 受け取ったバイト列を、コピーせずに配列として見る NumPy の関数（そのあと `reshape`） |
+
+**動かす**
+
+```bash
+pytest tests/ipc/test_protocol.py -v
+```
+
+- [ ] 4つのテストが `PASSED`（型が混ざった配列、非連続な配列、空の配列、バージョンの不一致）
+
+### Step 2：サーバーとクライアント ― `server.py`（穴①〜④）、`client.py`（穴①〜④）、`serve_policy.py`（穴①）（2時間）
+
+**読む**：client.py の docstring（Lazy Pirate パターン）。REQ ソケットは「送ったら必ず受ける」の順番が崩れると使えなくなるので、タイムアウトしたら**ソケットを作り直す**。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| `server` ①② | クライアント（REQ）と対になる「受けて返す」側のソケット。サーバーは待ち受け（bind）、クライアントは接続（connect） |
+| `server` ③ | ROS のカメラ名 → 方策の視点名の対応表。無ければそのまま（`dict.get` の既定値） |
+| `server` ④ | 返事のヘッダと配列をフレームのリストにする（Step 1 の `encode`） |
+| `client` ① | `zmq.Poller` に「受信できるデータが来たら」を監視させる定数 |
+| `client` ② | 複数フレームを1メッセージとして送るソケットのメソッド |
+| `client` ③ | `poll` の戻り値（辞書）に自分のソケットが入っていれば受信できる |
+| `client` ④ | 返事が来ないので、ソケットを作り直す（同じクラスのメソッド） |
+| `serve_policy` ① | JSON の文字列を辞書にする |
+
+**動かす**
+
+```bash
+pytest tests/ipc -v
+# 端末A（.venv-bench）：LIBERO のモデルでサーバーを起動
+python scripts/serve_policy.py --config configs/policy/torch_fp32.yaml --bind tcp://127.0.0.1:5600
+# 端末B（source scripts/ros_env.sh。システム Python）：クライアントから1回推論
+python3 -c "
+import numpy as np
+from evla.ipc.client import InferenceClient
+c = InferenceClient('tcp://127.0.0.1:5600', timeout_ms=30000)
+print('ping:', c.ping())
+img = np.zeros((480, 640, 3), np.uint8)
+r = c.predict({'top': img, 'wrist': img}, np.zeros(8, np.float32), 'pick up the cube', 0.0)
+print(r.actions.shape, 'rtt=%.0f ms server=%.0f ms' % (r.rtt_ms, r.server_latency_ms))
+"
+```
+
+**確かめる**
+
+- [ ] `pytest tests/ipc` がすべて `PASSED`（`test_timeout_when_no_server`：サーバーがなければ `TimeoutError`）
+- [ ] 端末B で `ping: True` と `(50, 7)`、RTT とサーバー側の時間が表示される。**RTT − サーバー時間 ＝ 通信のオーバーヘッド**をメモする
+- [ ] 端末A のサーバーを Ctrl+C で止めて端末B を再実行 → `TimeoutError`。サーバーを再起動して端末B を再実行 → 回復する
+
+### Step 3：関節の対応 ― `action_mapping.py`（穴①〜③、1時間）
+
+**読む**：34章の `conventions.py`（**同じ対応表**を使う）。方策の出力は「度、LeRobot の順序、グリッパ 0〜100」、コントローラの指令は「rad、URDF の関節名」。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | 秒の小数部分をナノ秒の整数にする（`Duration` は秒とナノ秒の2つ） |
+| ② | i 番目の点に到達する時刻。最初の点（i=0）は1周期後（`1 / control_hz`） |
+| ③ | 関節ごとの `(N,)` を**列**として並べて `(N, 5)` にする `np.stack` の軸 |
+
+**動かす**（ROS 側のシェルで）
+
+```bash
+cd ros2_ws && colcon build --symlink-install --packages-select evla_nodes && cd .. && source scripts/ros_env.sh
+python3 -c "
+import numpy as np
+from evla.dataset.conventions import rad_vector_to_lerobot
+from evla_nodes.action_mapping import chunk_to_trajectories
+q = np.radians([10, -20, 30, -40, 50, 60])
+arm, grip = chunk_to_trajectories(np.tile(rad_vector_to_lerobot(q), (3, 1)), 30.0)
+print(arm.joint_names, np.round(arm.points[0].positions, 4), [p.time_from_start.nanosec for p in arm.points])
+print(np.round(q[:5], 4))
+"
+```
+
+- [ ] 腕の関節名が `['1', '2', '3', '4', '5']`、最初の点の角度が元の `q` の先頭5つと一致する（往復で恒等）
+- [ ] 時刻が `[33333333, 66666666, 100000000]` 付近（1/30秒刻み、最初の点は1周期後）
+
+### Step 4：ポリシーノード ― `policy_node.py`（穴①〜③、3時間）
+
+**読む**：4.2節の図。タイマー（30Hz、sim 時刻）の中で「推論が終わっていれば軌道にして送る → キューが減っていれば次の推論を始める」を繰り返す。推論は**別スレッド**で行い、ROS のコールバックをブロックしない。27章の `AsyncExecutor` と同じ考え方（到着時に古い先頭 k 個を捨てる）であることを確かめる。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | キューの残り（ステップ数）＝ 最後に送った軌道が終わる時刻 − 今 を、制御周期で割る |
+| ② | 別スレッドの推論が終わったか（`Future` のメソッド。待たずに調べる） |
+| ③ | `ThreadPoolExecutor` に関数と引数を渡して実行させ、`Future` を受け取るメソッド |
+
+### Step 5：疎通確認（D7、1〜2時間）
+
+計画書のとおり、まず**LIBERO のモデル**でループが回ることだけを確かめます（成功率は問わない）。行動の次元（7）とロボット（6）、状態の次元（8 と 6）が合わないので、仮の対応が要る場合があります（**【要確認】**：サーバーで状態を8次元にゼロ埋めする、など）。
+
+```bash
+# 端末A（.venv-bench）
+python scripts/serve_policy.py --config configs/policy/torch_fp32.yaml --bind tcp://127.0.0.1:5600
+# 端末B（ROS）
+ros2 launch evla_sim sim.launch.py world:=/tmp/evla_world_0.sdf
+# 端末C（ROS）
+ros2 run evla_nodes policy_node --ros-args -p use_sim_time:=true -p mode:=async -p n_exec:=25 \
+  -p metrics_csv:=results/policy_metrics_libero.csv
+ros2 topic echo /policy/metrics       # 端末D で
+```
+
+**確かめる**
+
+- [ ] Gazebo で腕が（でたらめでも）動き続ける
+- [ ] `/policy/metrics` に `rtt_ms`・`obs_to_cmd_s`・`discarded`・`period_s` が流れる
+- [ ] 端末C を Ctrl+C すると `results/policy_metrics_libero.csv` が書かれる。`period_s` の分布（実効制御周期）と、キュー枯渇（`discarded` や周期の伸び）をメモに残す
+
+### Step 6：SO-101 のモデルで動かす（D8）
+
+- [ ] 36章 Step 5 で作った設定で、`--image_key_map '{"top": "top", "wrist": "wrist"}'` を付けてサーバーを起動する
+- [ ] 少なくとも1エピソード、腕がキューブに向かって動く。腕が逆方向に動いたら、7節の落とし穴（符号と関節の対応）を確かめる
+- [ ] Python のファイルの先頭の `from evla._blank import ___` を消し、`ruff check src/evla/ipc` を通して、コミットする
 
 ## 6. ベストプラクティス
 

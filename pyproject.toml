@@ -1,0 +1,35 @@
+[project]
+name = "evla"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "numpy",          # バージョンはvenv側で決まる（ROS側1.26 / bench側2.x の両方で動くコードにする）
+  "pyyaml",
+  "pyzmq",
+  "msgpack",
+]
+
+[project.optional-dependencies]
+bench = [
+  # TODO(you): env/12 の手順で確定させたバージョンを固定する
+  # "lerobot[smolvla,libero]==0.6.x", "openvino==2026.4.*", "physicalai==0.3.*",
+  "pandas", "pyarrow", "matplotlib", "psutil",
+]
+dev = ["pytest", "ruff", "mypy"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+extend-exclude = ["answers", "third_party"]   # answers/ は穴埋めの答え（docs/03_fill_in_guide.md）
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "NPY"]
+# 穴埋めのヒントのコメントが長くなるので、行の長さは見ない（コードは ruff format で整える）
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: 実際にモデルやサーバーを動かす重いテスト（-m \"not slow\" で除外）"]
+

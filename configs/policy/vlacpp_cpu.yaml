@@ -1,0 +1,4 @@
+runtime: vlacpp
+model: data/models/gguf/smolvla-libero.gguf   # 情報用（実際に読むのは vla-server）
+server_addr: tcp://127.0.0.1:5555
+extra: {action_dim: 7}

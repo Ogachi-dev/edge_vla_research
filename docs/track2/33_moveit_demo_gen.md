@@ -1,5 +1,10 @@
 # track2/33. MoveItでのpick&placeデモ自動生成とランダム化
 
+> **ハンズオン**（共通の進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - この章で埋める穴：**18個**（`src/evla/planning/` の `ik_so101.py` 7、`randomize.py` 5、`episode_plan.py` 1、`build.py` 3、`ros2_ws/src/evla_nodes/evla_nodes/demo_generator.py` 2）
+> - ゴール：`pytest tests/planning` が通り、Gazebo で固定配置の pick & place が1回成功する。20エピソードの試運転で、200エピソードにかかる時間を見積もれる
+> - 進め方：Step 1〜3 は**ROS なし**（pytest）。Step 4 以降は ROS 側。Step 5〜6 は34章の `episode_runner` を使うので、34章と行き来する
+
 ## 1. 目的と計画書の対応
 
 - MoveIt 2で、ランダムな配置のキューブを箱に入れる軌道を自動生成する。
@@ -33,7 +38,8 @@ lerobot_wsのMoveIt設定は `position_only_ik: False`（6自由度の姿勢を�
 | `src/evla/planning/ik_so101.py` | SO-101の幾何的な逆運動学（真上からの把持用）。ROS非依存 |
 | `src/evla/planning/episode_plan.py` | `EpisodePlan`：エピソードを「区間」の列として表すデータ型 |
 | `src/evla/planning/randomize.py` | 配置・軌道パラメータのサンプリング |
-| `evla_nodes/demo_generator.py` | MoveItで各区間を計画し、`EpisodePlan` を作る（実行はしない） |
+| `src/evla/planning/build.py` | 区間の列（`EpisodePlan`）を組み立てる。ROS 非依存（関節空間の移動は差し替え可能な関数として受け取る） |
+| `evla_nodes/demo_generator.py` | MoveIt で関節空間の移動を計画する（`build.py` に渡す。実行はしない） |
 | `configs/datagen/default.yaml` | ランダム化の範囲、区間のパラメータ、エピソード数 |
 | `tests/planning/test_ik_so101.py` | IK→FKの往復テスト |
 
@@ -125,18 +131,183 @@ def fk_tcp(q: ArrayLike, geo: So101Geometry) -> NDArray[np.float64]:
 | 8 | retreat | 上へ離れる |
 | 9 | wait | 成功判定の静止を待つ |
 
-## 5. 実装手順
+## 5. ハンズオン
 
-1. **固定配置で1回成功させる（3時間）**：まずランダム化なしで、キューブを決まった位置に置き、区間1〜9を手書きの目標で計画・実行して、32章の判定で `success` が出るところまで行く。この段階では、MoveItの `execute` をそのまま使ってよい（実時間で動かす）。
-2. **IKの問題を解決する（2〜3時間）**：次のどれかを選び、`docs/decisions.md` に理由を書く。
-   - (a) **幾何的なIKを自作する**（学習効果が最も高い）。IKで目標の関節角を求め、MoveItには**関節空間の目標**として渡す（衝突回避と時間パラメータ化はMoveItに任せる）。
-   - (b) `pick_ik` を入れ、位置と姿勢の重みを調整する。
-   - (c) KDLのまま、真上からの把持姿勢（2.1で到達可能と分かっている姿勢）だけを目標にする。
-3. **計画と実行の分離（2時間）**：`demo_generator` が `EpisodePlan` を作って返すだけにする。実行は、34章の `episode_runner` ができるまでは、仮の実行関数（FollowJointTrajectoryアクションに送る）で行う。
-4. **ランダム化（2時間）**：`sample_scene`、`sample_params`。エピソードごとのシードは `base_seed + episode_index` にする。
-5. **立て直しの注入（2時間）**：確率 p（例：0.3）で `grasp_offset_m` を1〜2cm入れる。descendの後で「ずれた位置」から「正しい位置」へ小さく動く区間を挟む。注入したかどうかを `perturbations` に記録する。
-6. **頑健化（2時間）**：6節の項目を実装する。
-7. **試運転（1時間）**：20エピソードを回し、成功率と1エピソードあたりの所要時間を測る。200エピソードにかかる時間を見積もる。
+各 Step は「**読む → 埋める → 動かす → 確かめる**」の1サイクルです。この章の穴埋め版では、**IK を自作し**（lerobot_ws の KDL は真上からの姿勢で失敗しやすい。2.1節）、MoveIt には関節空間の目標だけを渡します。区間の組み立ても ROS から切り離しています。だから MoveIt が動かなくても、`joint_interp`（関節空間の直線補間）で先に進めます。
+
+### Step 0：準備（10分）
+
+```bash
+source .venv-bench/bin/activate
+grep -n "【穴\|TODO(you)\|【要確認】" src/evla/planning/*.py ros2_ws/src/evla_nodes/evla_nodes/demo_generator.py configs/datagen/*.yaml
+pytest tests/planning -q        # まだ失敗する
+```
+
+- [ ] 穴18個が表示され、テストが失敗する
+- [ ] `configs/datagen/so101_geometry.yaml` の値が**仮の値**であることを確認した（Step 1 の後半で実物に置き換える）
+
+### Step 1：真上からの把持の IK ― `ik_so101.py`（穴①〜⑦、2〜3時間）
+
+**読む**：ファイル冒頭の docstring（「腕の平面」のモデル）と4.1節。**紙に図を描く**：真上から見た図（パンの角度 ψ）と、腕の平面の側面図（肩 → 肘 → 手首 → TCP、TCP は真下を向く）。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | 真上から見た目標の方位角。`atan2` の引数の順 |
+| ② | 工具が真下を向くので、手首の軸は TCP の真上 L3 にある。高さの基準を肩（`base_height_m`）にとる |
+| ③ | 2リンク（L1, L2）の平面 IK。肩から手首までの距離に余弦定理を使って cos(θ2) を求める |
+| ④ | 肩 → 手首の線と、上腕のなす角（`atan2` で、L2 の成分から求める） |
+| ⑤ | 工具のピッチ φ = θ1 + θ2 + θ3 = −90° から θ3 を決める |
+| ⑥ | 爪の向き（ヨー）＝ ψ + roll なので、roll を逆算する |
+| ⑦ | 全関節が可動範囲に入っているか（`np.all` と2つの比較） |
+
+**動かす**
+
+```bash
+pytest tests/planning/test_ik_so101.py -v
+python -c "
+import numpy as np, yaml
+from evla.planning.ik_so101 import So101Geometry, ik_top_down, fk_tcp
+g = So101Geometry(**{k: tuple(v) if isinstance(v, list) else v for k, v in yaml.safe_load(open('configs/datagen/so101_geometry.yaml')).items()})
+q = ik_top_down([0.2, -0.05, 0.015], 0.3, g); print(np.round(q, 3)); print(np.round(fk_tcp(q, g), 4))
+print(ik_top_down([1.0, 0.0, 0.0], 0.0, g))
+"
+```
+
+**確かめる**
+
+- [ ] 3つのテスト（`up` / `down` のパラメータ化を含めて4件）が `PASSED`
+- [ ] FK の出力が `[0.2, -0.05, 0.015, -1.5708, 0.3]`（φ = −π/2）。1m 先は `None`（届かない）
+
+**URDF の値に置き換える（`TODO(you)`）**：`so101_geometry.yaml` のリンク長・`sign`・`offset_rad`・関節の範囲を、URDF（xacro 展開後）の joint origin と limit から読み取って書きます。そのあと ROS 側で、**FK と TF が一致する**ことを確かめます。
+
+```bash
+source scripts/ros_env.sh
+ros2 launch evla_sim sim.launch.py world:=/tmp/evla_world_0.sdf
+# 別の端末で：適当な関節角に動かし、その角度で fk_tcp を計算した値と比べる
+ros2 run tf2_ros tf2_echo base tcp          # 【要確認】ベースのリンク名
+```
+
+- [ ] FK と TF の位置の差が 1mm 未満（ずれるなら、リンク長か `sign` / `offset_rad` が違う）
+
+### Step 2：区間の組み立て ― `episode_plan.py`（穴①）と `build.py`（穴①〜③）（1.5時間）
+
+**読む**：4節の `EpisodePlan`（区間の列）。`build_plan` を上から読み、9つの区間（approach → descend → close → lift → transfer → lower → open → retreat → wait）が何をするかを書き出す。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| `episode_plan` ① | 区間の種類で長さの持ち方が違う。腕の区間だけは軌道の最後の時刻が長さになる（`isinstance`） |
+| `build` ① | 補間の進み具合 s ∈ [0,1] を、始点と終点で速度0になる3次式（smoothstep：3s² − 2s³）に通す |
+| `build` ② | p0 → p1 の直線を n 等分した k 番目の点 |
+| `build` ③ | キューブ幅で止まる閉じ角。`params` に入っている |
+
+**動かす**
+
+```bash
+pytest tests/planning/test_build.py -v
+python -c "
+import yaml
+from evla.planning.build import PlanConfig, build_plan, joint_interp
+from evla.planning.ik_so101 import So101Geometry
+from evla.planning.randomize import SceneSample, TrajectoryParams
+g = So101Geometry(**{k: tuple(v) if isinstance(v, list) else v for k, v in yaml.safe_load(open('configs/datagen/so101_geometry.yaml')).items()})
+sc = SceneSample(cube_xy_m=(0.2, -0.05), cube_yaw_rad=0.3, cube_color=(1, 0, 0), box_xy_m=(0.2, 0.15), q_init_rad=(0, 0, 0, 0, 0))
+pr = TrajectoryParams(approach_height_m=0.08, vel_scale=0.5, acc_scale=0.5, planner_seed=0, grasp_offset_m=(0.01, 0, 0), gripper_close_rad=0.1)
+plan = build_plan(0, sc, pr, g, PlanConfig(), joint_interp)
+print([s.name for s in plan.segments], round(plan.duration_s, 1), plan.perturbations)
+"
+```
+
+**確かめる**
+
+- [ ] 4つのテストが `PASSED`
+- [ ] ずれ（1cm）を入れたので、`descend` の後に `correct` の区間が入り、`perturbations` に `grasp_offset` が記録されている。エピソードの長さ（秒）をメモする
+
+### Step 3：ランダム化 ― `randomize.py`（穴①〜⑤、1時間）
+
+**読む**：`configs/datagen/default.yaml`（ランダム化の範囲）。エピソードごとのシードは `base_seed + episode_index`。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | `[lo, hi)` の一様乱数（`rng` のメソッド） |
+| ② | キューブと箱の距離（`math` の関数）。近すぎる配置はやり直す（棄却サンプリング） |
+| ③ | 色のリストから1つ選ぶ添字 |
+| ④ | 初期姿勢に小さなノイズ。home と同じ形の正規乱数 |
+| ⑤ | 確率 `perturb_prob` で立て直しを注入する。一様乱数と比べる |
+
+**動かす**
+
+```bash
+pytest tests/planning/test_randomize.py -v
+```
+
+- [ ] 3つのテストが `PASSED`（同じシードなら同じ配置、範囲と最小距離、注入の割合が約30%）
+
+### Step 4：MoveIt で関節空間の移動を計画する ― `demo_generator.py`（穴①②、1〜2時間）
+
+**読む**：MoveItPy のチュートリアル（2節のリンク）。このクラスは `build_plan` の `plan_joint_move` に**差し替えて渡す**だけのもの（`joint_interp` と同じ形の関数）であることを確認する。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | `MoveItPy` から計画グループ（`ARM_GROUP`）を操作するオブジェクトを得るメソッド |
+| ② | 目標を**関節角の状態**で与える。開始状態と同じ作り方（`self._state`） |
+
+**動かす**：MoveIt を起動した状態で、home から適当な姿勢への計画を1回試します。
+
+```bash
+source scripts/ros_env.sh
+python3 -c "
+import numpy as np
+from evla_nodes.demo_generator import MoveItJointPlanner
+traj = MoveItJointPlanner()(np.zeros(5), np.array([0.3, -0.5, 0.8, 0.5, 0.0]), 0.5)
+print(traj.joint_names, len(traj.times_s), round(traj.duration_s, 2))
+"
+```
+
+- [ ] 関節名・点の数・所要時間が表示される。動かなければ【要確認】の行（robot 名、パッケージ名、グループ）を実物に合わせる
+- [ ] **それでも動かなければ**、`planner:=interp`（`joint_interp`）で先に進む。理由を `docs/decisions.md` に残す
+
+### Step 5：固定配置で1回成功させる（34章の Step 4 と同時に、2時間）
+
+34章の `episode_runner` ができたら、ランダム化の範囲を**1点に潰した**設定で1エピソード回します。
+
+```bash
+cp configs/datagen/default.yaml configs/datagen/fixed.yaml
+# fixed.yaml を編集：cube_xy_m・box_xy_m の範囲を1点に、cube_yaw_deg を [0, 0]、perturb_prob を 0、n_episodes を 1
+ros2 run evla_nodes episode_runner --ros-args -p use_sim_time:=true \
+  -p datagen_config:=configs/datagen/fixed.yaml -p out_dir:=data/raw/fixed_test -p planner:=interp
+cat data/raw/fixed_test/ep_*/meta.json
+```
+
+- [ ] `meta.json` の `success` が `true`（32章の判定で `success` が出た）
+- [ ] 失敗したら `failure_reason`（`grasp_rejected:<条件>` など）を見て、TCP・IK・閾値のどれを直すか決める
+
+### Step 6：試運転と見積もり（1時間）
+
+```bash
+cp configs/datagen/default.yaml configs/datagen/trial20.yaml     # n_episodes: 20 に変える
+ros2 run evla_nodes episode_runner --ros-args -p use_sim_time:=true \
+  -p datagen_config:=configs/datagen/trial20.yaml -p out_dir:=data/raw/trial20 -p planner:=interp
+cat data/raw/trial20/generation_stats.json
+```
+
+- [ ] 生成の成功率（失敗の内訳つき）と、1エピソードの所要時間（`meta.json` の `wall_s`）が分かる
+- [ ] 200エピソードにかかる時間を見積もり、D4の夜に間に合うか判断した
+- [ ] キューブ位置の散布図（`meta.json` の `plan.scene`）で、範囲全体がカバーされている
+- [ ] 6節の頑健化の項目（IK 失敗時のやり直し、タイムアウトなど）のうち、試運転で問題になったものに対処した
+
+### Step 7：仕上げ（10分）
+
+- [ ] 5ファイルの先頭の `from evla._blank import ___` を消し、`ruff check src/evla/planning` を通す
+- [ ] `pytest tests/planning` がすべて通る
+- [ ] コミットする（`configs/datagen/fixed.yaml`・`trial20.yaml` は残しておくと、後で再現できる）
 
 ## 6. ベストプラクティス
 

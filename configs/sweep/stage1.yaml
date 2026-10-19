@@ -1,0 +1,14 @@
+# 段1：ランタイム×精度（×デバイス）。python scripts/sweep.py configs/sweep/stage1.yaml --dry_run
+name: stage1_runtime_precision
+mode: A
+base: configs/bench/base.yaml
+rounds: 3
+cooldown_s: 60
+grid:
+  - policy.runtime: [torch]
+    policy.precision: [fp32, bf16]
+  - policy.runtime: [ov]
+    policy.device: [CPU, GPU]
+    policy.model: [data/models/ov/smolvla-libero-fp16-ov, data/models/ov/smolvla-libero-w8a16-ov]
+exclude: []
+# TODO(you): vlacpp の行（server.binary / server.gguf）を足す。vlacpp は server の設定ごと上書きが必要

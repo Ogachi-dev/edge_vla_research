@@ -1,5 +1,10 @@
 # track2/32. 把持判定：純粋関数のコアとROSノード、DetachableJoint連携
 
+> **ハンズオン**（共通の進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - この章で埋める穴：**33個**（`src/evla/grasp/` の `geometry.py` 11、`judge.py` 11、`events.py` 3、`ros2_ws/src/evla_nodes/` の `evla_nodes/ros_utils.py` 2、`evla_nodes/grasp_judge_node.py` 5、`setup.py` 1）
+> - ゴール：`pytest tests/grasp` が通り、Gazebo で「正しい位置で閉じると attach、ずれた位置では `grasp_candidate` だけ」が確かめられる
+> - 進め方：Step 1〜5 は**ROS なし**（`.venv-bench` と pytest）でできる。Step 6〜7 は ROS 側のシェルで行う。穴の数は多いが、1つ1つは短い
+
 ## 1. 目的と計画書の対応
 
 - 計画書の把持条件1〜4、解放条件、タスク成功条件を、**ROSに依存しない純粋関数**として実装し、pytestで境界値を検証する。
@@ -115,21 +120,185 @@ class StepOutput:
 | `released` | 解放条件を満たし、`detached` を確認した | キューブの位置 |
 | `success` / `failure` | 静止を確認した / タイムアウト | 判定に使った値 |
 
-## 5. 実装手順
+## 5. ハンズオン
 
-1. **幾何の関数とテスト（2時間）**
-   - `relative_pose`：ランダムな姿勢で `relative_pose(T, T) == I` になること、合成の結合則が成り立つことをテストする。
-   - `yaw_misalignment_deg`：0°→0、14.9°→14.9、44°→44、46°→−44、90°→0、−91°→−1、をテストする。「90°足しても結果が同じ」ことを、ランダムな角度で多数回確かめる（プロパティテスト）。
-2. **開き幅の表（1時間）**：31章で爪の先端のフレームを追加しておけば、関節6を少しずつ動かしてTFで先端間の距離を測り、`(q, opening)` の表を作れる。`config/opening_table.csv` に保存する。
-3. **`check_grasp`（1時間）**：条件1（軸ごとの箱、開閉方向は開き幅から計算）、条件2、条件3、条件4（任意）。テストで、各条件の境界±εを確かめる。
-4. **`cube_in_box` と静止判定（1時間）**：箱の内側、縁の高さ未満、Nフレーム連続の静止。
-5. **状態機械（2時間）**：`FREE →（条件成立で attach を指令）→ ATTACH_PENDING →（gzが attached）→ ATTACHED →（解放条件で detach を指令）→ DETACH_PENDING →（gzが detached）→ RELEASED →（成功/失敗の判定）`。テストでは、gzの状態を手で与えて遷移を確かめる。
-6. **ROSノード（2時間）**
-   - 購読：`/joint_states`（関節6の角度）、`/model/cube/pose`、`/grasp/state`、グリッパへの指令（`/gripper_controller/joint_trajectory` か、コントローラの `controller_state` の reference）
-   - TF：`tf2_ros.Buffer` と `TransformListener` で `world → tcp` を取得する
-   - 30Hz（sim時刻）のタイマーで、幾何量を計算 → `state_machine.update` → 指令をpublish → イベントをpublish・保存
-   - サービス `~/reset`（`std_srvs/Trigger`）：エピソード開始時に状態機械をリセットし、detachを送る
-7. **結合テスト（1時間）**：Gazeboで、手動（またはMoveIt）でキューブの位置までグリッパを動かして閉じ、`attached` になることを確認する。ずれた位置で閉じたら、`grasp_candidate` は出るが attach されないことも確認する。
+各 Step は「**読む → 埋める → 動かす → 確かめる**」の1サイクルです。この章の設計の要は「**判定は ROS を知らない純粋関数、ノードは I/O だけ**」です。だから Step 5 までは、Gazebo なしで境界値まで確かめられます。
+
+### Step 0：準備（5分）
+
+```bash
+source .venv-bench/bin/activate
+grep -n "【穴" src/evla/grasp/*.py ros2_ws/src/evla_nodes/evla_nodes/{ros_utils,grasp_judge_node}.py ros2_ws/src/evla_nodes/setup.py
+pytest tests/grasp -q          # まだ失敗する
+```
+
+- [ ] 穴33個が表示され、テストが失敗する
+- [ ] 2.1節の記法（`T_w_tcp`、`T_tcp_cube = inv(T_w_tcp) @ T_w_cube`）を紙に書き写しておく
+
+### Step 1：幾何の関数 ― `geometry.py`（穴①〜⑪、2時間）
+
+**読む**：4節の `geometry.py` の仕様と、`tests/grasp/test_geometry.py`（パラメータ化されたヨーの境界値の表がある）。
+
+**埋める**（①〜⑤：同次変換）
+
+| 穴 | ねらい |
+| --- | --- |
+| ①② | 4×4 の同次変換の、どこが回転でどこが並進か。NumPy のスライスで左辺に書く |
+| ③④ | 逆変換。回転は直交行列なので逆行列＝転置。並進は「回転の逆を掛けて符号を反転」。`np.linalg.inv` を使わない理由（速さと数値の安定）も docstring で確認する |
+| ⑤ | docstring の式そのもの（`@` は行列の積） |
+
+**埋める**（⑥〜⑪：角度と開き幅）
+
+| 穴 | ねらい |
+| --- | --- |
+| ⑥ | 角度の折り返し。`+half` してから剰余をとり、`-half` で戻す（立方体は90°回しても同じ形なので周期90°） |
+| ⑦ | キューブの3つの軸のうち、接近軸方向の成分の**絶対値**が最も小さいもの＝最も水平な軸 |
+| ⑧ | 平面上の角度。`atan2` の引数は (y, x) の順 |
+| ⑨ | 回転行列の**列**は、その座標系の軸を world で表したもの |
+| ⑩ | `acos` の引数を [-1, 1] に収める（丸め誤差で 1.0000001 になると NaN） |
+| ⑪ | 表の線形補間（NumPy の1次元補間の関数） |
+
+**動かす**
+
+```bash
+pytest tests/grasp/test_geometry.py -v
+python -c "
+import numpy as np
+from evla.grasp.geometry import fold_deg, pose_to_matrix, relative_pose
+print([round(fold_deg(d), 3) for d in (0, 14.9, 44, 46, 90, -91)])
+T = pose_to_matrix([0.1, 0.2, 0.3], [0, 0, np.sin(0.3), np.cos(0.3)])
+print(np.allclose(relative_pose(T, T), np.eye(4)))
+"
+```
+
+**確かめる**
+
+- [ ] すべてのテストが `PASSED`（`test_yaw_is_90deg_periodic`：ランダムな角度で「90°足しても同じ」というプロパティテスト）
+- [ ] `[0.0, 14.9, 44.0, -44.0, 0.0, -1.0]` と `True`
+
+### Step 2：開き幅の表を作る（`TODO(you)`、1時間）
+
+`config/opening_table.csv` は仮の値（2行）です。31章で爪の先端のフレームを追加しておけば、関節6を少しずつ動かして TF で先端間の距離を測り、`(q, opening)` の表を作れます。
+
+```bash
+source scripts/ros_env.sh
+ros2 launch evla_sim sim.launch.py world:=/tmp/evla_world_0.sdf
+# 別の端末で：関節6を q に動かしてから、先端間の距離を読む（q を 0.1 rad 刻みで繰り返す）
+ros2 run tf2_ros tf2_echo <固定側の先端> <可動側の先端>
+```
+
+- [ ] `ros2_ws/src/evla_sim/config/opening_table.csv` に10行程度の `q_rad,opening_m` がある（q の昇順）
+- [ ] `grasp.yaml` の `opening_table_csv` に、その表のパスを書いた
+
+### Step 3：把持と成功の条件 ― `judge.py` の穴①〜⑦（1時間）
+
+**読む**：計画書の把持条件1〜4と、4節の `check_grasp` / `cube_in_box`。L3のヒント（8節）の疑似コードと、実際のコードの違い（`np.abs` を先に計算している）も見る。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | Step 1 の `relative_pose` を使う。どちらが「見る側」か（TCP から見たキューブ） |
+| ② | 開閉方向の許容値は**固定値ではなく**、そのときの開き幅で決まる（隙間の半分）。負にならないようにする |
+| ③ | ②の関数を使う。`off` は絶対値済み、`OPEN_AXIS` の成分を見る |
+| ④ | ヨーは符号付きなので絶対値で比べる |
+| ⑤ | `failed` が空なら成功 |
+| ⑥ | 箱の中心からのずれ（xy の2成分）が、軸ごとに半幅以内。`np.all` の中身 |
+| ⑦ | z が縁の高さより低い（箱の縁に乗っているだけ、を除く） |
+
+**動かす**
+
+```bash
+pytest tests/grasp/test_judge.py -v -k "not state_machine"
+```
+
+- [ ] 5つのテスト（パラメータ化を含めると7件）が `PASSED`。境界値 `tol ± ε` で ok / ng が切り替わる
+
+### Step 4：状態機械 ― `judge.py` の穴⑧〜⑪（1.5時間）
+
+**読む**：`GraspStateMachine` の docstring の状態遷移。**紙に状態遷移図を描く**（FREE → ATTACH_PENDING → ATTACHED → DETACH_PENDING → RELEASED）。各矢印に「何が起きたら」を書く。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ⑧ | 「立ち上がり」の検出。前回は閉じていなくて、今回閉じた（`self.m.prev_close` を使う）。これで、30Hz で同じ候補を出し続けない |
+| ⑨ | attach を送ったら、gz から返事が来るまで待つ状態に移る（連打しないため。7節の落とし穴） |
+| ⑩ | gz が「外れた」と返してきた（`gz_attached` の値） |
+| ⑪ | 静止のカウント。動いていなければ +1、動いたら 0 に戻す（三項演算子で1行） |
+
+**動かす**
+
+```bash
+pytest tests/grasp/test_judge.py -v -k state_machine
+```
+
+- [ ] `test_state_machine_happy_path` と `test_state_machine_rejected_candidate_logged_once` が `PASSED`
+- [ ] 紙の状態遷移図と、テストの `update` の呼び出し順を見比べて、各 `assert` がどの矢印を確かめているか言える
+
+### Step 5：イベントの記録 ― `events.py`（穴①〜③、30分）
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | `json` は NumPy の配列を知らない。Python のリストに変換するメソッド |
+| ② | `json.dumps` が知らない型に出会ったときに呼ぶ関数を渡す引数（同じファイルの `_default`） |
+| ③ | 最も多く出てきた要素。`max(..., key=...)` か `collections.Counter` |
+
+**動かす**
+
+```bash
+pytest tests/grasp -v
+```
+
+- [ ] `tests/grasp` の**すべて**のテストが `PASSED`（ここまで ROS なし）
+
+### Step 6：ROS ノード ― `ros_utils.py`（穴①②）、`grasp_judge_node.py`（穴①〜⑤）、`setup.py`（穴①）（2時間）
+
+**読む**：tf2 のチュートリアル（2節のリンク）。ノードの各コールバックは「値を覚えるだけ」で、判定は `on_timer` で `self.sm.update` を呼ぶだけであることを確認する。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| `ros_utils` ① | ROS の時刻は `sec` と `nanosec` の2つ。整数のナノ秒1つにまとめる |
+| `ros_utils` ② | z 軸まわりの回転 θ のクォータニオンは `(0, 0, sin(θ/2), cos(θ/2))`。すぐ下の `w` の行と対になる |
+| `node` ① | tf2 の定番の2行。`Buffer` を作り、それに `/tf` を貯めるオブジェクトを作る（引数は buffer と node） |
+| `node` ②③ | rclpy の購読と配信を作る `Node` のメソッド。すぐ下の行に同じ形の例がある |
+| `node` ④ | `Buffer` から「world から見た tcp」を引く。引数の順（target, source）と、`Time()`＝最新 |
+| `node` ⑤ | ノードのコールバックを処理し続ける rclpy の関数 |
+| `setup.py` ① | エントリポイントは `"モジュール:関数"`。下の3行と同じ形 |
+
+**動かす**
+
+```bash
+source scripts/ros_env.sh
+cd ros2_ws && colcon build --symlink-install --packages-select evla_nodes && cd .. && source scripts/ros_env.sh
+ros2 launch evla_sim sim.launch.py world:=/tmp/evla_world_0.sdf      # judge ノードも起動する
+# 別の端末で
+ros2 node info /grasp_judge
+ros2 topic echo /grasp/event
+```
+
+- [ ] `ros2 node info` で、4節の購読・配信・サービス（`~/reset`）が揃っている
+- [ ] 起動ログに `TF 待ち` が出続けない（出続けるなら `tcp` の TF が無い → 31章の Step 5）
+
+### Step 7：Gazebo での結合テスト（1時間）
+
+MoveIt（または `ros2 topic pub` で関節指令）で、グリッパをキューブの位置まで動かして閉じます。
+
+- [ ] **正しい位置**で閉じると、`/grasp/event` に `grasp_candidate`（`decision.ok: true`）→ `attach_sent` → `attached` が出て、`/grasp/state` が `attached` になる
+- [ ] **ずれた位置**で閉じると、`grasp_candidate`（`decision.failed` に条件名）だけが出て、attach されない
+- [ ] 箱の上で開くと `released`、静止すると `success` が出る
+- [ ] `/tmp/grasp_events.jsonl`（`grasp.yaml` の `event_log`）にイベントが1行1件で残っている
+- [ ] `grasp.yaml` の `TODO(you)`（閾値）に、根拠をコメントで書いた（6節）
+
+### Step 8：仕上げ（10分）
+
+- [ ] Python の5ファイルの先頭の `from evla._blank import ___` を消し、`ruff check src/evla/grasp ros2_ws/src/evla_nodes` を通す（他の章の穴が残るファイルは除く）
+- [ ] `pytest tests/grasp` がすべて通る
+- [ ] コミットする
 
 ## 6. ベストプラクティス
 

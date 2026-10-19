@@ -1,5 +1,10 @@
 # track2/36. 学習済みモデルの変換（OpenVINO IR / GGUF）と数値一致の検証
 
+> **ハンズオン**（共通の進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - この章で埋める穴：**4個**（`scripts/export_ov.py` 3、`scripts/export_gguf.sh` 1）
+> - ゴール：SO-101 版の OpenVINO IR（FP16、INT8 重み）と GGUF（BF16、Q8_0、Q4_0）ができ、PyTorch との一致の表が `reports/equivalence_so101.md` にある
+> - 進め方：**答えの分かっている LIBERO 版で手順を確かめてから**（Step 1）、SO-101 版に同じ手順を当てる（Step 2〜）
+
 ## 1. 目的と計画書の対応
 
 - 35章のファインチューニング済みSmolVLAを、トラック1で選んだランタイム（OpenVINO または vla.cpp）で動く形式に変換する。
@@ -36,7 +41,7 @@ vla.cpp の README には `smolvla-so101.gguf` の例があり、SO-101（6次�
 | --- | --- |
 | `scripts/export_ov.py`（`.venv-export` で実行） | LeRobotのチェックポイント → OpenVINO IR（FP16、INT8重み） |
 | `scripts/export_gguf.sh` | LeRobotのチェックポイント → GGUF（BF16、Q8_0、Q4_0） |
-| `scripts/check_equivalence_so101.py` | 取り分けたエピソードのフレームで、PyTorchと変換後の行動を比較する |
+| `scripts/check_equivalence_so101.py`（自分で作る） | 取り分けたエピソードのフレームで、PyTorchと変換後の行動を比較する（22章の `scripts/check_equivalence.py` を写し、観測を LeRobotDataset から作る） |
 | `data/models/so101_v1/{torch,ov_fp16,ov_int8,gguf_bf16,gguf_q8_0,...}/` | 変換結果 |
 | `reports/equivalence_so101.md` | 一致の表 |
 
@@ -58,13 +63,92 @@ def main(cfgs: Sequence[PolicyConfig], ref: PolicyConfig, obs: list[Observation]
     """22章の compare_chunks で、各設定を基準（PyTorch FP32）と比べる。"""
 ```
 
-## 5. 実装手順
+## 5. ハンズオン
 
-1. **書き出しの試行（1〜2時間）**：`.venv-export` で、まず**公開のLIBERO版**（`HuggingFaceVLA/smolvla_libero`）を書き出し、Intelの公開IR（`OpenVINO/smolvla-libero-fp16-ov`）と同じ結果になるかを確かめる。手順が正しいことを、既知の答えで先に確認する。
-2. **SO-101版の書き出し（1時間）**：35章のチェックポイントで同じことをする。INT8重み版も作る。
-3. **GGUFの変換（1時間）**：vla.cppの変換用venvで、BF16 → Q8_0 / Q4_0（＋ `--vision`）を作る。`vla-server` で読み込めて、`action_dim` が6であることを応答で確かめる。
-4. **一致の確認（1〜2時間）**：取り分けたエピソードから20フレームを取り出し、固定ノイズで、各変換結果をPyTorch FP32と比べる。
-5. **トラック1の最適設定を適用する**：28章で選んだ設定（ランタイム、精度、スレッド数、視点、解像度）に対応する変換結果を、37章の推論サーバーで使う。
+各 Step は「**読む → 埋める → 動かす → 確かめる**」の1サイクルです。変換は「動いたように見えて、実は行動がずれている」ことが一番怖いので、**既知の答えと比べる**ことを繰り返します。
+
+### Step 0：準備（5分）
+
+```bash
+grep -n "【穴" scripts/export_ov.py scripts/export_gguf.sh
+ls outputs/train/so101_v1/checkpoints/last/pretrained_model/     # 35章の学習結果（Step 2 から使う）
+```
+
+- [ ] 穴4個が表示される
+- [ ] `.venv-export`（[env/12](../env/12_inference_envs.md) Step 2）と、vla.cpp の変換用 venv（25章 Step 4）がある
+
+### Step 1：LIBERO 版で手順を確かめる ― `scripts/export_ov.py`（穴①〜③、1〜2時間）
+
+**読む**：4節の書き出しの流れ（physicalai の `SmolVLA` → `export` → `InferenceModel` で読み込めるか確認）。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | ハッシュに少しずつデータを足すメソッド（01章の `hashlib` と同じ仲間）。大きなファイルを一度にメモリに載せない |
+| ② | physicalai の `SmolVLA` に、HF の repo かローカルのディレクトリを渡す引数名（ソースか `help(SmolVLA)` で調べる） |
+| ③ | 書き出し先の形式の名前（`InferenceModel` の `backend` と同じ） |
+
+**動かす**
+
+```bash
+source .venv-export/bin/activate
+python scripts/export_ov.py --ckpt HuggingFaceVLA/smolvla_libero --out data/models/ov_check/libero_fp16
+deactivate
+source .venv-bench/bin/activate
+sed 's#data/models/ov/smolvla-libero-fp16-ov#data/models/ov_check/libero_fp16#' configs/policy/ov_cpu_fp16.yaml > /tmp/ov_mine.yaml
+python scripts/check_equivalence.py --fixed_obs data/fixed_obs/libero_object_t0.npz \
+  --ref configs/policy/ov_cpu_fp16.yaml --test /tmp/ov_mine.yaml --n 5 --out reports/equivalence_export_check.md
+```
+
+**確かめる**
+
+- [ ] `exported:` に IR のファイル一式が並び、`convert_log.json` に元のチェックポイントのハッシュと physicalai の版が残る
+- [ ] 自分で書き出した IR と、Intel の公開 IR の行動の `max_abs` が小さい（24章 Step 2 で「乱数演算あり」と分かっていれば、N回推論した平均どうしで比べる）。差があれば理由をメモに残す
+
+### Step 2：SO-101 版を書き出す（1時間）
+
+```bash
+source .venv-export/bin/activate
+CKPT=outputs/train/so101_v1/checkpoints/last/pretrained_model
+python scripts/export_ov.py --ckpt $CKPT --out data/models/so101_v1/ov_fp16
+python scripts/export_ov.py --ckpt $CKPT --out data/models/so101_v1/ov_int8 --int8
+deactivate
+du -sh data/models/so101_v1/ov_*
+```
+
+- [ ] `ov_fp16` と `ov_int8` ができ、INT8 の方が小さい
+
+### Step 3：GGUF に変換する ― `scripts/export_gguf.sh`（穴①、1時間）
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | 変換スクリプトに変換元のチェックポイントを渡す引数（`python third_party/vla.cpp/scripts/convert_smolvla_to_gguf.py --help` で見る） |
+
+**動かす**
+
+```bash
+source third_party/vla.cpp/.venv-converter/bin/activate
+bash scripts/export_gguf.sh outputs/train/so101_v1/checkpoints/last/pretrained_model so101_v1
+deactivate
+```
+
+- [ ] `data/models/so101_v1/` に `gguf_bf16.gguf`・`gguf_q8_0.gguf`・`gguf_q4_0.gguf` と `sha256.txt` ができる
+- [ ] 25章 Step 3 の Python で `gguf` を `gguf_bf16.gguf` に替えてサーバーを起動し、応答の `action_dim` が **6**（SO-101 の関節数）であることを確かめる
+
+### Step 4：一致の表を作る（1〜2時間）
+
+`scripts/check_equivalence.py` を `scripts/check_equivalence_so101.py` に写し、観測を **取り分けたエピソード**（学習に使っていないもの）の LeRobotDataset から20フレーム作るように書き換えます。PyTorch FP32（`runtime: torch`、`model: <チェックポイント>`）を基準にして、変換したすべての形式と比べます。
+
+- [ ] `reports/equivalence_so101.md` に、OV（FP16 / INT8）と GGUF（BF16 / Q8_0 / Q4_0）の行がある
+- [ ] 値が22章の目安の表の範囲に入っている。外れていれば、前処理（画像の向き・カメラ名・状態の単位）を疑う
+
+### Step 5：トラック1の最適設定を当てる（30分）
+
+- [ ] 28章の `reports/track1_selection.md` で選んだ設定（ランタイム・精度・スレッド数・視点・解像度）に対応する変換結果を決め、37章の推論サーバーの設定ファイルに書く
+- [ ] `export_ov.py` の先頭の `from evla._blank import ___` を消し、コミットする（`data/models/` は git の管理外）
 
 ## 6. ベストプラクティス
 
