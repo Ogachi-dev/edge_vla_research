@@ -1,6 +1,6 @@
 # 00. 日程索引（D1〜D10）と判定ゲート
 
-> 実装は穴埋め形式です。各日のタスクで開く章の冒頭に、埋めるファイルとテストがあります。全体の一覧と進め方は [03_fill_in_guide.md](03_fill_in_guide.md)。
+> 実装はハンズオン形式です。各日のタスクで開く章の5節「ハンズオン」を、Step 0 から順に進めます（表の「Step」は、その5節の Step 番号）。穴埋めの共通ルールと全体の一覧は [03_fill_in_guide.md](03_fill_in_guide.md)。
 
 計画書の「日程と判定ゲート」を、**その日にやるタスクのチェックリスト**にしたものです。各タスクから、実装の章へリンクしています。
 
@@ -41,8 +41,8 @@
 | 1 | [ ] ★ LIBEROの起動（MuJoCoの描画の確認）、`lerobot-eval` で1回成功 | [21](track1/21_libero_setup.md) Step 1〜2 | 2h |
 | 1 | [ ] `LiberoTaskEnv` と一致テスト | [21](track1/21_libero_setup.md) Step 3〜4 | 3h |
 | 1 | [ ] ★ `Policy` 抽象＋PyTorch CPUベースライン | [22](track1/22_policy_interface.md)、[23](track1/23_runtime_pytorch.md) | 4h |
-| 2 | [ ] ★ Gazeboシーン：机・キューブ・箱・2カメラ・TCP | [31](track2/31_gazebo_scene.md) Step 1〜3、5 | 4h |
-| 2 | [ ] 衝突マスク、DetachableJoint、サービスの確認 | [31](track2/31_gazebo_scene.md) Step 4、6 | 2h |
+| 2 | [ ] ★ Gazeboシーン：机・キューブ・箱・2カメラ・TCP | [31](track2/31_gazebo_scene.md) Step 1〜5、7 | 4h |
+| 2 | [ ] 衝突マスク、DetachableJoint、サービスの確認 | [31](track2/31_gazebo_scene.md) Step 6、8 | 2h |
 
 ### D3
 
@@ -53,8 +53,8 @@
 | 1 | [ ] vla.cpp（CPU、可能ならSYCL / OV）のアダプタ | [25](track1/25_runtime_vlacpp.md)、[env/12](env/12_inference_envs.md) Step 4〜5 | 3h |
 | 1 | [ ] 一致の表（全ランタイム） | [22](track1/22_policy_interface.md) | 1h |
 | 2 | [ ] ★ 把持判定のコア（純粋関数）とテスト → ROSノード | [32](track2/32_grasp_judge_node.md) | 4h |
-| 2 | [ ] ★ MoveItで、固定配置のpick&placeを1回成功させる | [33](track2/33_moveit_demo_gen.md) Step 1〜2 | 3h |
-| 2 | [ ] ロックステップの記録ノード | [34](track2/34_episode_recorder.md) Step 1〜3 | 4h |
+| 2 | [ ] ★ MoveItで、固定配置のpick&placeを1回成功させる | [33](track2/33_moveit_demo_gen.md) Step 1〜2、4〜5 | 3h |
+| 2 | [ ] ロックステップの記録ノード | [34](track2/34_episode_recorder.md) Step 1〜4 | 4h |
 
 D3は作業量が最も多い日です。遅れたら、vla.cppのSYCL / OVとトラック1の一致の表をD4に回します。
 
@@ -64,9 +64,9 @@ D3は作業量が最も多い日です。遅れたら、vla.cppのSYCL / OVと�
 | --- | --- | --- | --- |
 | 1 | [ ] ★ 掃引の仕組み（展開、子プロセス実行、再開） | [28](track1/28_sweep_and_pareto.md) Step 1〜3 | 3h |
 | 1 | [ ] 段1〜3の試運転（`n_measure=3`） | [28](track1/28_sweep_and_pareto.md) | 1h |
-| 2 | [ ] ★ ランダム化、立て直しの注入、頑健化 | [33](track2/33_moveit_demo_gen.md) Step 4〜7 | 4h |
-| 2 | [ ] 変換スクリプト（生 → LeRobotDataset）、品質チェック | [34](track2/34_episode_recorder.md) Step 4〜5 | 3h |
-| 2 | [ ] 20エピソードの試運転 → 所要時間の見積もり | [33](track2/33_moveit_demo_gen.md) Step 7 | 1h |
+| 2 | [ ] ★ ランダム化、立て直しの注入、頑健化 | [33](track2/33_moveit_demo_gen.md) Step 3、6 | 4h |
+| 2 | [ ] 変換スクリプト（生 → LeRobotDataset）、品質チェック | [34](track2/34_episode_recorder.md) Step 5〜6 | 3h |
+| 2 | [ ] 20エピソードの試運転 → 所要時間の見積もり | [33](track2/33_moveit_demo_gen.md) Step 6 | 1h |
 | 🌙 | **デモ生成（成功100〜200エピソード）** と **掃引の段1〜3**（CPUを取り合うので、どちらを優先するか決める。**【判断】** データ生成を優先し、掃引はD5の昼に回す） | | |
 
 ### D5
@@ -76,8 +76,8 @@ D3は作業量が最も多い日です。遅れたら、vla.cppのSYCL / OVと�
 | 2 | [ ] ★ データの品質確認 → **判定ゲート**（下記） | [34](track2/34_episode_recorder.md) 6節 | 2h |
 | 2 | [ ] ★ （ゲート通過なら）学習機へ転送し、学習を開始する | [35](track2/35_finetune_smolvla.md) Step 1〜4 | 2h |
 | 1 | [ ] 掃引の段1〜3（昼の間、学習機で学習している間に） | [28](track1/28_sweep_and_pareto.md) | （実行） |
-| 1 | [ ] executor（同期 / 非同期）と偽の環境でのテスト | [27](track1/27_closed_loop_b_c.md) Step 1〜4 | 4h |
-| 🌙 | **LIBEROの閉ループ（ロックステップ）：上位3設定の成功率** | [27](track1/27_closed_loop_b_c.md) Step 5〜6 | |
+| 1 | [ ] executor（同期 / 非同期）と偽の環境でのテスト | [27](track1/27_closed_loop_b_c.md) Step 1〜3 | 4h |
+| 🌙 | **LIBEROの閉ループ（ロックステップ）：上位3設定の成功率** | [27](track1/27_closed_loop_b_c.md) Step 4〜5 | |
 
 ## 4. D5 判定ゲート
 
@@ -116,7 +116,7 @@ D3は作業量が最も多い日です。遅れたら、vla.cppのSYCL / OVと�
 | トラック | タスク | 章 | ⏱ |
 | --- | --- | --- | --- |
 | 1 | [ ] ★ 同期と非同期の比較 | [27](track1/27_closed_loop_b_c.md) | （実行） |
-| 1 | [ ] ★ パレート図、ベンチマーク表 | [28](track1/28_sweep_and_pareto.md) Step 5、7 | 3h |
+| 1 | [ ] ★ パレート図、ベンチマーク表 | [28](track1/28_sweep_and_pareto.md) Step 4〜6 | 3h |
 | 1 | [ ] トラック2に渡す最適設定を決めて記録する | [28](track1/28_sweep_and_pareto.md) DoD | 1h |
 | 2 | [ ] ★ Gazebo閉ループの疎通確認（LIBEROのモデルでパイプラインを検証） | [37](track2/37_policy_node_zmq.md) Step 5 | 3h |
 | 2 | [ ] 学習の監視、チェックポイントのオフライン評価 | [35](track2/35_finetune_smolvla.md) Step 5 | 1h |
@@ -203,7 +203,7 @@ D3は作業量が最も多い日です。遅れたら、vla.cppのSYCL / OVと�
 | 測定条件の統一（電源プラン、P/E固定、ウォームアップ、温度） | [02](02_best_practices.md) 6節、[26](track1/26_bench_mode_a.md)、[40](common/40_metrics_measurement.md) 6節 |
 | 閾値の感度分析 | [38](track2/38_gazebo_eval.md) |
 | リスク：シミュレーションと推論のiGPU競合 | [20](track1/20_overview.md) 4.1（モード分け）、[27](track1/27_closed_loop_b_c.md)（仮想時間方式）、[38](track2/38_gazebo_eval.md) |
-| リスク：WSL2での描画 | [env/11](env/11_ros2_gazebo.md)、[21](track1/21_libero_setup.md) Step 1、[31](track2/31_gazebo_scene.md) Step 5 |
+| リスク：WSL2での描画 | [env/11](env/11_ros2_gazebo.md)、[21](track1/21_libero_setup.md) Step 1、[31](track2/31_gazebo_scene.md) Step 7 |
 | リスク：ROS 2とLeRobotの依存衝突 | [01](01_repository_design.md) 4.1、[34](track2/34_episode_recorder.md)、[37](track2/37_policy_node_zmq.md) |
 | リスク：MoveItのデモの単調さ | [33](track2/33_moveit_demo_gen.md) |
 | リスク：DetachableJointの挙動 | [31](track2/31_gazebo_scene.md)、[32](track2/32_grasp_judge_node.md) |

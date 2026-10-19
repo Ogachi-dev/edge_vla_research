@@ -1,11 +1,12 @@
-# 03. 穴埋め版の進め方
+# 03. 穴埋めの共通ルール
 
 各章の「インタフェース仕様」から自分でコードを書き起こすと、コードを考えるだけで時間がなくなります。
 そこで、**動くコードを先に用意し、学習の要になる行だけを空欄（穴）にしました**。
-穴を埋めてテストを通しながら、各章の本文で「なぜそう書くのか」を確認する、という進め方にします。
+各章の **5節「ハンズオン」** が、穴を埋める順番・実行するコマンド・期待される出力を Step ごとに案内します。この章は、全章に共通するルール（穴の見た目、答えの見方、確認できる範囲）をまとめたものです。
 
 - 穴の数：**281 個**（79 ファイル）。1つの穴は、関数名・引数・1つの式のどれかです。
 - 答え：`answers/` に、穴を埋めた完成版が同じパスで置いてあります（git の管理外）。
+- 章ごとの5節は、各 Step に「その穴で何を学ぶか（ねらい）」の表を載せています。答えは書いていないので、コードのヒントと合わせて考えます。
 - 章ごとの本文（インタフェース仕様、ベストプラクティス、落とし穴）は、そのまま「穴を埋めるための資料」として使います。
 
 ---
@@ -39,15 +40,17 @@ ruff check src/evla/common/run_id.py                       # F401（未使用の
 
 ## 2. 1つの穴の埋め方（手順）
 
-1. 対応する章の「4. インタフェース仕様」と、ファイルの docstring を読み、その関数が**何を返すべきか**を確認する。
-2. 穴のヒントを読む。API 名が分からなければ、公式ドキュメントか `python -c "import X; help(X.Y)"` で調べる。
-3. 埋めたら、その章のテストを実行する（4節の表）。テストのないもの（ROS・モデルが必要なもの）は、章の「9. 完了条件」で確かめる。
-4. 埋め終わったファイルの先頭の `from evla._blank import ___` を消し、`ruff check` を通す。
+1. 章の5節の、その穴を含む Step を開き、「読む」に挙げた節とファイルの docstring で、その関数が**何を返すべきか**を確認する。
+2. 「ねらい」の表と、コードの穴のヒントを読む。API 名が分からなければ、公式ドキュメントか `python -c "import X; help(X.Y)"` で調べる。
+3. 埋めたら、その Step の「動かす」のコマンドを実行し、「確かめる」のチェック項目と出力を見比べる。テストのないもの（ROS・モデルが必要なもの）も、Step のコマンドで確かめられるようにしてある。
+4. 章の最後の Step（仕上げ）で、ファイルの先頭の `from evla._blank import ___` を消し、`ruff check` を通す。
 
 **答え合わせのルール（おすすめ）**：同じ穴で10分以上止まったら、章のヒント（L1→L2→L3）を開く。それでも分からなければ、`answers/` の該当行だけを見る。
 
 ```bash
-diff answers/src/evla/common/run_id.py src/evla/common/run_id.py    # 自分の答えとの差分（埋め終わってから）
+# 自分の答えとの差分（埋め終わってから）。答えのファイルはヒントのコメントの書き方が違うので、行末のコメントを除いて比べる
+f=src/evla/common/run_id.py
+diff <(sed 's/  #.*//' answers/$f) <(sed 's/  #.*//' $f)
 ```
 
 ## 3. 環境ごとに、どこまで確認できるか
@@ -111,7 +114,12 @@ ROS ノードは `evla`（`src/evla`）を import します。ROS 側からは `
 
 | 章で挙げたもの | 代わりに使うもの |
 | --- | --- |
-| `tests/sim/test_libero_obs.py`、`tests/policy/test_{torch,ov,vlacpp}_policy.py` | モデルが要るので、章の完了条件のスモークテストで確かめる |
+| `tests/sim/test_libero_obs.py`、`tests/policy/test_{torch,ov,vlacpp}_policy.py` | モデルが要るので、各章の5節（ハンズオン）の Step にあるコマンドで確かめる |
+| `scripts/check_igpu.py`（env/10、任意） | env/10 の5節 Step 3 の1行のコマンド |
+| `scripts/probe_vcpu_speed.py`（env/10） | 4.3節のインタフェースのとおりに自分で書く |
+| `scripts/torch_smoke.py`（23章）、`scripts/print_env.py`（01章） | 各章の5節の Step にある `python -c` のコマンド |
+| `scripts/offline_action_eval.py`（35章） | 4.2節のインタフェースのとおりに自分で書く（任意） |
+| `scripts/make_all_figures.sh`（41章） | 28・38・40章のスクリプトを順に呼ぶシェルを自分で書く |
 | `scripts/check_equivalence_so101.py`（36章） | `scripts/check_equivalence.py` を写し、観測を LeRobotDataset から作る |
 | `scripts/analyze_gazebo_eval.py`（38章） | `evla.analysis.rejudge.sensitivity_curve` と `evla.analysis.plots.grasp_ecdf_plot` を呼ぶ |
 | `configs/eval/scenes_v1.yaml`（38章） | `eval_runner` がシード 900000＋i から配置を作る（全設定で同じ配置になる） |

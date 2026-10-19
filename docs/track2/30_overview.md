@@ -1,5 +1,9 @@
 # track2/30. トラック2の全体像：ROSグラフとプロセス境界
 
+> **ハンズオンの地図**（共通の進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - この章に穴埋めはありません。トラック2の各章（31〜38）のハンズオンを、どの順で進めるかと、ROS グラフの全体像を押さえる章です
+> - 5節の表の「ゴール」が、各章の最後のチェックで確かめられたら次の章へ進みます
+
 ## 1. 目的と計画書の対応
 
 - トラック2の構成（ノード、トピック、サービス、プロセス、時間の基準）を先に決める。個々の実装は31〜38章で扱う。
@@ -104,16 +108,20 @@ flowchart LR
 | `/arm_controller/joint_trajectory` | `trajectory_msgs/JointTrajectory` | ROS | ポリシーの指令（評価時） |
 | `/arm_controller/follow_joint_trajectory` | action | ROS | MoveItの実行（生成時） |
 
-## 5. 実装手順（トラック2の推奨順）
+## 5. ハンズオンの進め方（トラック2の推奨順）
 
-1. [31](31_gazebo_scene.md)：シーン、カメラ、bridge、時間設定（D2）
-2. [32](32_grasp_judge_node.md)：把持判定のコアとテスト → ROSノード（D3）
-3. [33](33_moveit_demo_gen.md)：固定配置で1回のpick&placeが成功する → ランダム化（D3）
-4. [34](34_episode_recorder.md)：ロックステップ記録、変換、データ生成を一晩回す（D3〜D4）
-5. **D5判定ゲート**（[00_schedule](../00_schedule.md)）
-6. [35](35_finetune_smolvla.md)：学習（D5〜）
-7. [37](37_policy_node_zmq.md)：ポリシーノード、まずLIBEROモデルで疎通確認（D6〜D7）
-8. [36](36_model_conversion.md)、[38](38_gazebo_eval.md)：変換と評価（D8）
+| 順 | 章 | 穴 | ハンズオンのゴール | 日 |
+| --- | --- | --- | --- | --- |
+| 1 | [31](31_gazebo_scene.md) | 16 | launch 1本でシーン・カメラ・bridge が起動し、attach / detach を操作できる | D2 |
+| 2 | [32](32_grasp_judge_node.md) | 33 | `pytest tests/grasp` が通り、Gazebo で attach の可否が判定される | D3 |
+| 3 | [33](33_moveit_demo_gen.md) | 18 | `pytest tests/planning` が通り、固定配置の pick & place が1回成功する → ランダム化 | D3〜D4 |
+| 4 | [34](34_episode_recorder.md) | 36 | ロックステップで記録・変換でき、一晩でデータセットを作る | D3〜D4 |
+| 5 | **D5判定ゲート** | — | [00_schedule](../00_schedule.md) の基準で、学習に進むかを決める | D5 |
+| 6 | [35](35_finetune_smolvla.md) | 0 | 学習機で SmolVLA をファインチューニングし、エッジで読み込める | D5〜 |
+| 7 | [37](37_policy_node_zmq.md) | 21 | `pytest tests/ipc` が通り、まず LIBERO のモデルでループが回る | D6〜D7 |
+| 8 | [36](36_model_conversion.md)、[38](38_gazebo_eval.md) | 4＋6 | 変換したモデルで Gazebo の評価を回し、成功率と感度曲線を出す | D8 |
+
+ROS ノードの章（31・32・33・34・37・38）は、**ROS なしで確かめられる部分（`src/evla/` の純粋関数と pytest）を先に**、ROS 側（`ros2_ws/`、`source scripts/ros_env.sh`）を後に進める順で Step を並べています。
 
 ## 6. ベストプラクティス
 

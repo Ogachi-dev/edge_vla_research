@@ -1,5 +1,9 @@
 # track1/20. トラック1の全体像：LIBEROでのエッジ推論ベンチマーク
 
+> **ハンズオンの地図**（共通の進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - この章に穴埋めはありません。トラック1の各章（21〜28）のハンズオンを、どの順で進めるかを決める章です
+> - 5節の表の「ゴール」が、各章の最後のチェックで確かめられたら次の章へ進みます
+
 ## 1. 目的と計画書の対応
 
 - トラック1で作るもの全体の地図を示す。個々の実装は21〜28章で扱う。
@@ -101,15 +105,19 @@ flowchart TB
 - **主：`libero_object`**（10タスク。物体を籠に入れるPick & Placeで、計画書のタスクに最も近い）。vla.cppのSmolVLA参照値は89.5%（200エピソード、チャンクから10行動を実行）。
 - 余裕があれば `libero_spatial` を追加する。
 
-## 5. 実装手順（トラック1の推奨順）
+## 5. ハンズオンの進め方（トラック1の推奨順）
 
-1. [21](21_libero_setup.md)：LIBEROを起動し、ランダム行動で1エピソード回して動画を保存する（D2）
-2. [22](22_policy_interface.md)→[23](23_runtime_pytorch.md)：PyTorchのSmolVLAで1エピソード成功させる（D2）
-3. [26](26_bench_mode_a.md)：モードAのベンチ基盤を作り、PyTorchのベースラインを測る（D2〜D3）
-4. [24](24_runtime_openvino.md)、[25](25_runtime_vlacpp.md)：OVとvla.cppのアダプタを作り、モードAで測る（D3）
-5. [28](28_sweep_and_pareto.md)：モードAの掃引（D4）
-6. [27](27_closed_loop_b_c.md)：モードB（上位3設定、D5）→ モードC（D6〜D7）
-7. [28](28_sweep_and_pareto.md)：パレート図（D7）
+| 順 | 章 | 穴 | ハンズオンのゴール | 日 |
+| --- | --- | --- | --- | --- |
+| 1 | [21](21_libero_setup.md) | 14 | LIBERO を描画付きで動かし、固定観測セットを保存する | D2 |
+| 2 | [22](22_policy_interface.md) → [23](23_runtime_pytorch.md) | 14＋7 | `pytest tests/policy` が通り、PyTorch の SmolVLA で1エピソード成功する | D2 |
+| 3 | [26](26_bench_mode_a.md) | 16 | モードAのベンチ基盤で、PyTorch のスレッド数別のベースラインを測る | D2〜D3 |
+| 4 | [24](24_runtime_openvino.md)、[25](25_runtime_vlacpp.md) | 10＋20 | OV と vla.cpp のアダプタで推論し、22章の一致の表に行を足す | D3 |
+| 5 | [28](28_sweep_and_pareto.md) | 15 | 掃引の仕組みを作り、モードAの段1〜3を夜に回す | D4 |
+| 6 | [27](27_closed_loop_b_c.md) | 19 | 偽の環境で executor を検証し、モードB（上位3設定）→ モードC を回す | D5〜D7 |
+| 7 | [28](28_sweep_and_pareto.md) | （済） | パレート図とベンチマーク表を `reports/` に出す | D7 |
+
+各章の5節は「Step 0（準備：穴の一覧と、まだ失敗するテストの確認）→ Step 1〜（読む → 埋める → 動かす → 確かめる）→ 仕上げ（`ruff`、全テスト、コミット）」の形で揃えてあります。
 
 ## 6. ベストプラクティス
 

@@ -1,5 +1,10 @@
 # env/10. WSL2の設定とiGPU（Iris Xe）、CPUトポロジ
 
+> **ハンズオン**（共通の進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - この章に穴埋めはありません。コマンドを順に実行し、各 Step の「確かめる」をすべてチェックしてから次へ進みます
+> - 自分で書くもの：`scripts/probe_vcpu_speed.py`（Step 4。4.3節のインタフェースのとおり）。4.2節の `check_igpu.py` は任意（Step 3 の1行のコマンドで代用できる）
+> - ゴール：Ubuntu 24.04 の WSL から iGPU が見え、「WSL 内で P/E コアを固定できるか」の結論が出ている
+
 ## 1. 目的と計画書の対応
 
 - WSL2上で、**メモリ・CPU・iGPUを計測に使える状態**にする。
@@ -19,8 +24,8 @@
 | パス | 役割 |
 | --- | --- |
 | `C:\Users\<you>\.wslconfig`（Windows側） | WSL VMのメモリ・CPU・スワップの設定 |
-| `scripts/check_igpu.py` | OpenVINOのデバイス一覧とGPU名を表示する |
-| `scripts/probe_vcpu_speed.py` | vCPUごとのシングルスレッド性能を測る（P/Eコア推定実験） |
+| `scripts/probe_vcpu_speed.py`（自分で書く） | vCPUごとのシングルスレッド性能を測る（P/Eコア推定実験） |
+| `scripts/check_igpu.py`（任意） | OpenVINOのデバイス一覧とGPU名を表示する（5節 Step 3 の1行のコマンドで代用できる） |
 | `results/runs/<id>_env_vcpu-probe/` | 上の実験結果 |
 | `docs/notes/env_setup.md`（自作） | 実際に打ったコマンドと結果のメモ |
 
@@ -64,13 +69,20 @@ def probe(vcpus: Sequence[int], rounds: int, n_iter: int) -> list[ProbeResult]:
     """各vCPUに順番に固定して run_workload を計時する。round ごとに vCPU の順序をシャッフルする。"""
 ```
 
-## 5. 実装手順
+## 5. ハンズオン
+
+各 Step は「**実行する → 出力を確かめる → メモに残す**」の1サイクルです。実際に打ったコマンドと出力は `docs/notes/env_setup.md` に貼っていきます（報告書の「環境」の節の材料になる）。
 
 ### Step 1：Windows側の準備（30分）
 
 1. Intelの最新グラフィックスドライバ（Iris Xe）をWindowsに入れる。WSLのGPUは、Windows側のドライバを `/dev/dxg` 経由で使う。
 2. AC電源につなぎ、電源モードを「最適なパフォーマンス」にする（設定 → システム → 電源）。電源プランも最高パフォーマンスにする（`powercfg /list` で現在のプランを確認）。
 3. `.wslconfig` を作成し、`wsl --shutdown` で再起動する。
+
+**確かめる**
+
+- [ ] `powercfg /list` で、使っている電源プランに `*` が付いている。電源モードと合わせてメモに残す
+- [ ] WSL を起動し直して `free -g` の total が約47GB、`nproc` が `.wslconfig` の `processors` と同じ
 
 ### Step 2：Ubuntu 24.04 ディストリビューションの追加（30分）
 
@@ -85,6 +97,11 @@ wsl -l -v      # VERSION が 2 であること
 - vla.cppのビルド済みバイナリは Ubuntu 24.04 以降の glibc を要求する。
 - oneAPI 2026.x は22.04（jammy）のサポートを打ち切った。
 
+**確かめる**
+
+- [ ] `wsl -l -v` で `Ubuntu-24.04` の VERSION が `2`
+- [ ] Ubuntu 側で `lsb_release -a` が `24.04`、`python3 --version` が `3.12.x`
+
 ### Step 3：WSL内でのGPU確認（1時間）
 
 1. デバイスファイルを確認する：`ls -l /dev/dxg`（存在すればよい。Intel iGPUの場合、WSLには `/dev/dri` が無いことが多い）
@@ -93,12 +110,22 @@ wsl -l -v      # VERSION が 2 であること
    - <https://github.com/intel/compute-runtime/releases> の `.deb` 一式を入れる
    - どちらの場合も、**WSLをサポートするビルドか**をリリースノートで確認する。
 3. `clinfo -l` を実行する。`Intel(R) Graphics` などのGPUプラットフォームが列挙されればOK。
-4. `.venv-bench` を作った後（[env/12](12_inference_envs.md)）、`python scripts/check_igpu.py` で `GPU` が見えることを確認する。
+4. `.venv-bench` を作った後（[env/12](12_inference_envs.md)）、OpenVINO から `GPU` が見えることを確認する。
+
+```bash
+python -c "import openvino as ov; c = ov.Core(); print([(d, c.get_property(d, 'FULL_DEVICE_NAME')) for d in c.available_devices])"
+```
+
+**確かめる**
+
+- [ ] `ls -l /dev/dxg` でデバイスファイルがある
+- [ ] `clinfo -l` に `Intel(R) Graphics` などの GPU プラットフォームが出る
+- [ ] （env/12 の後）OpenVINO のデバイス一覧に `CPU` と `GPU` の両方があり、GPU の名前に `Iris(R) Xe` が入る
 
 ### Step 4：vCPUのP/Eコア推定実験（1〜2時間）
 
 1. `lscpu -e` を実行し、WSLから見えるトポロジを記録する（この端末では「8コア×2スレッド」の均質な構成に見えた）。
-2. `probe_vcpu_speed.py` を実装し、`rounds=5` で全16 vCPUを測る。
+2. `scripts/probe_vcpu_speed.py` を4.3節のインタフェースのとおりに書き（`os.sched_setaffinity` で1つの vCPU に固定 → `run_workload` を計時、を vCPU の順番をシャッフルしながら繰り返す）、`rounds=5` で全16 vCPUを測る。
 3. vCPUごとの所要時間を箱ひげ図にする。次のどちらに当たるかで、方針を決める。
 
 | 観測結果 | 解釈 | 方針 |
@@ -110,6 +137,12 @@ wsl -l -v      # VERSION が 2 であること
 
 - (a) `.wslconfig` の `processors` を変えたり（8 / 16）、スレッド数を掃引したりして、**スレッド数の効果だけ**を報告する。P/Eの効果は「WSL2では制御不能」と明記する。
 - (b) P/Eの実験だけ、**Windowsネイティブ**のPython（OpenVINOはWindowsで動く）で行う。`start /affinity <mask>` で起動し、マスクで論理プロセッサを指定する。Windowsでの論理プロセッサの番号付けは `Get-CimInstance Win32_Processor` やCoreinfo（Sysinternals）で確認する。
+
+**確かめる**
+
+- [ ] `lscpu -e` の出力がメモにある
+- [ ] vCPU ごとの所要時間の箱ひげ図（5 round 分）がある
+- [ ] 上の表のどちらに当たったかと、採る方針（taskset／代替案 (a)／(b)）を `docs/decisions.md` に書いた（26章の Step 6 で使う）
 
 ## 6. ベストプラクティス
 
@@ -158,7 +191,7 @@ sched_setaffinity(0, 元のaffinity)          # 戻す
 
 - [ ] Ubuntu 24.04のWSLで `free -g` の total が約47GB
 - [ ] `clinfo -l` でIntel GPUが列挙される
-- [ ] `python scripts/check_igpu.py` が `CPU` と `GPU` の両方を表示する（[env/12](12_inference_envs.md) の後）
+- [ ] OpenVINO のデバイス一覧が `CPU` と `GPU` の両方を表示する（5節 Step 3。[env/12](12_inference_envs.md) の後）
 - [ ] vCPUの推定実験の結果（図と表）があり、「WSL内でP/E固定ができるか」の結論がメモに書かれている
 - [ ] Windowsの電源設定を記録した
 

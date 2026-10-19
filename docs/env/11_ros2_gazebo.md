@@ -1,5 +1,9 @@
 # env/11. ROS 2 Jazzy＋Gazebo Harmonic＋lerobot_ws
 
+> **ハンズオン**（共通の進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - この章に穴埋めはありません。コマンドを順に実行し、各 Step の「確かめる」をすべてチェックしてから次へ進みます
+> - ゴール：SO-101 が Gazebo と MoveIt で動き、関節1〜6の対応と符号の表ができている（34章・37章の根拠になる）
+
 ## 1. 目的と計画書の対応
 
 - Ubuntu 24.04（WSL2）上に ROS 2 Jazzy と Gazebo Harmonic を入れ、SO-101 を Gazebo と MoveIt で動かせる状態にする。
@@ -64,7 +68,9 @@ export ROS_DOMAIN_ID=42                          # TODO(you): 他の機器と被
 # TODO(you): Gazeboの描画で問題が出たら、ここで環境変数を調整する（7節を参照）
 ```
 
-## 5. 実装手順
+## 5. ハンズオン
+
+各 Step は「**実行する → 出力を確かめる → メモに残す**」の1サイクルです。出力は `docs/notes/env_setup.md` に貼っていきます。ROS のシェルでは venv を有効にしません（`source scripts/ros_env.sh` が venv を止める）。
 
 ### Step 1：ROS 2 Jazzy（1時間）
 
@@ -78,12 +84,23 @@ sudo apt install -y \
   python3-zmq python3-msgpack python3-opencv
 ```
 
-3. `ros-jazzy-ros-gz` を入れると、Gazebo Harmonic（`gz sim`）も一緒に入る。`gz sim --version` で 8.x を確認する。
+3. `ros-jazzy-ros-gz` を入れると、Gazebo Harmonic（`gz sim`）も一緒に入る。
+
+**確かめる**
+
+- [ ] `source /opt/ros/jazzy/setup.bash && ros2 doctor --report | head` がエラーなく動く
+- [ ] `gz sim --version` が 8.x
+- [ ] `python3 -c "import zmq, msgpack, cv2, numpy; print(numpy.__version__)"` が `1.26.x`（ROS 側は NumPy 1.26。[01](../01_repository_design.md) のプロセス分離の前提）
 
 ### Step 2：WSLgでの描画確認（30分〜）
 
 1. `sudo apt install mesa-utils` → `glxinfo -B` を実行し、`OpenGL renderer string` に `D3D12 (Intel(R) Iris(R) Xe Graphics)` が出ることを確認する。`llvmpipe` と出る場合はソフトウェア描画になっている。
-2. `gz sim shapes.sdf` を実行し、GUIが開いてRTF（右下）が1.0付近になることを確認する。
+2. `gz sim shapes.sdf` を実行し、GUIが開くことを確認する。
+
+**確かめる**
+
+- [ ] `glxinfo -B` の `OpenGL renderer string` に `D3D12 (Intel(R) Iris(R) Xe Graphics)` が出る（`llvmpipe` ならソフトウェア描画。7節の落とし穴）
+- [ ] `gz sim shapes.sdf` の右下の RTF が 1.0 付近
 
 ### Step 3：lerobot_ws のビルド（1時間）
 
@@ -97,6 +114,12 @@ colcon build --symlink-install
 - `lerobot_ws` はリポジトリ全体が colcon ワークスペースです。`ros2_ws/src/lerobot_ws/src/*` の下にパッケージがありますが、colcon はサブディレクトリまで探索するので、このままでビルドできます。
 - **ルート側の `.gitignore` に `ros2_ws/src/lerobot_ws/` を追加する**か、git submodule として固定する（**【判断】** submoduleを推奨。コミットハッシュを固定でき、再現性が保てる）。
 
+**確かめる**
+
+- [ ] `colcon build` が `Summary: N packages finished` で終わり、失敗がない
+- [ ] `source scripts/ros_env.sh && ros2 pkg list | grep lerobot` で lerobot_ws のパッケージが見える
+- [ ] lerobot_ws のコミット（`git -C ros2_ws/src/lerobot_ws rev-parse HEAD`）をメモに残した
+
 ### Step 4：起動確認（1時間）
 
 1. 3つのlaunchを順番に起動し、RVizのMotionPlanningパネルからplan＆executeを1回行う。
@@ -104,11 +127,22 @@ colcon build --symlink-install
 3. `ros2 control list_controllers` で3つのコントローラが `active` になっていることを確認する。
 4. Gazeboの統計を確認する：`gz topic -e -t /stats -n 1`（**【要確認】** world名を付けた `/world/empty/stats` の場合もある。`gz topic -l | grep stats` で探す）。
 
+**確かめる**
+
+- [ ] RViz の MotionPlanning で plan＆execute した動きが、Gazebo 上のロボットにも反映される
+- [ ] `ros2 control list_controllers` で3つのコントローラが `active`
+- [ ] カメラなしの RTF（`real_time_factor`）をメモに残した（31章のカメラ付きの値と比べる）
+
 ### Step 5：関節の対応と符号の確認（1時間）
 
 1. `ros2 topic pub --once /arm_controller/joint_trajectory trajectory_msgs/msg/JointTrajectory ...` で、関節を1つずつ+0.3rad動かす。
 2. どの関節がどう動いたかを表にまとめる（例：関節1が+で上から見て反時計回り）。
 3. この表は、[34](../track2/34_episode_recorder.md) でLeRobotの関節名と符号の規約を決めるときの根拠になる。
+
+**確かめる**
+
+- [ ] 関節1〜6それぞれについて「+0.3rad でどちらに動いたか」と、対応する LeRobot の関節名（`shoulder_pan` など）の表がメモにある
+- [ ] グリッパ（関節6）は、角度が大きいほど開くのか閉じるのかが分かっている（32章の `gripper_closed_rad`、34章の `GRIPPER_*_DEG` に使う）
 
 ## 6. ベストプラクティス
 
