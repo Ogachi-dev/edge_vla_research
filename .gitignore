@@ -336,3 +336,6 @@ ros2_ws/log/
 
 # 穴埋めの答え（docs/03_fill_in_guide.md）。自分の答えと混ざらないよう git では管理しない
 answers/
+
+# scripts/gen_vla_proto.sh で生成する（docs/env/12 Step 6）
+src/evla/policy/_proto/vla_pb2.py
