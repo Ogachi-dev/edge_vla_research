@@ -1,9 +1,9 @@
 # track1/27. モードB・C：閉ループ評価（ロックステップ、リアルタイム、遅延注入、同期/非同期）
 
-> **穴埋め版**（進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
-> - 埋めるファイル（穴の数）：`src/evla/sim/latency.py`（2）、`src/evla/sim/executor.py`（7）、`src/evla/sim/closed_loop.py`（2）、`src/evla/analysis/stats.py`（7）、`scripts/eval_closed_loop.py`（1）
-> - テスト：`pytest tests/sim tests/analysis/test_stats.py`
-> - 「5. 実装手順」は、ゼロから書く場合の手順です。穴埋め版では、手順の中の**確認作業**（動作確認・測定・完了条件）を行い、コードは穴を埋めるだけで足ります。
+> **ハンズオン**（共通の進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - この章で埋める穴：**19個**（`src/evla/sim/` の `latency.py` 2、`executor.py` 7、`closed_loop.py` 2、`src/evla/analysis/stats.py` 7、`scripts/eval_closed_loop.py` 1）
+> - ゴール：`pytest tests/sim tests/analysis/test_stats.py` が通り、モードB（PyTorch FP32）の成功率が信頼区間付きで出る
+> - 進め方：Step 1〜3 は**偽の環境と偽の方策**でできる（LIBERO もモデルも不要）。この章の山場は Step 2 の非同期 executor
 
 ## 1. 目的と計画書の対応
 
@@ -26,7 +26,7 @@
 | `src/evla/sim/latency.py` | 遅延モデル（実測、一定値、分布からのサンプル） |
 | `src/evla/sim/executor.py` | `SyncExecutor`、`AsyncExecutor`（仮想時間方式） |
 | `src/evla/sim/closed_loop.py` | `run_episode()`、`run_eval(cfg)` |
-| `src/evla/sim/realtime.py` | 壁時計方式（確認用。1〜2設定だけ使う） |
+| `src/evla/sim/realtime.py` | 壁時計方式（確認用、任意。穴埋め版には含まれない） |
 | `src/evla/analysis/stats.py` | `wilson_ci`、`mcnemar`、`required_n` |
 | `scripts/eval_closed_loop.py` | CLI |
 | `configs/closed_loop/*.yaml` | モードB、モードC（同期 / 非同期）の設定例 |
@@ -136,27 +136,157 @@ def required_n(p1: float, p2: float, alpha: float = 0.05, power: float = 0.8) ->
     """2群の比率の差を検出するのに必要な1群あたりの試行数（正規近似）。"""
 ```
 
-## 5. 実装手順
+## 5. ハンズオン
 
-1. **偽の環境と偽の方策を作る（1時間）**：`tests/sim/fakes.py`。偽の方策はチャンクの各行動に「何番目の推論の、何番目の行動か」を埋め込む。偽の環境は受け取った行動を全部記録する。
-2. **`SyncExecutor`（1.5時間）**
-   - ループ：推論 → `k = ceil(L / Δ)` 回 `hold` を送る（lockstepなら0回）→ チャンクの先頭 `n_exec` 個を実行 → 繰り返す。
-   - 推論のための観測は、**推論を始めた時点**の観測。保持中の観測は使わない。
-3. **`AsyncExecutor`（2〜3時間）**：この章で最も難しいところ。
-   - キューを持つ。最初は同期で1回推論してキューを満たす。
-   - 各ステップで、キューの残り ≤ `async_threshold` かつ推論中でなければ、現在の観測で推論を「開始」する。推論は仮想時間で k ステップ後に「到着」する。
-   - 到着までは、キューの行動を実行し続ける。キューが空なら `hold`（`hold_steps` を数える）。
-   - 到着したら、新しいチャンクの先頭 k 個を捨て（その時刻はもう過ぎた）、`c[k : k + n_exec]` でキューを**置き換える**。
-   - 仮想時間方式なので、推論は実際には「開始」の時点で同期的に計算してしまってよい。結果を k ステップ後まで保留しておけばよい。**実際の並列実行は不要**で、それが再現性の源になる。
-4. **テスト（1.5時間）**：偽の環境で次を確かめる。
-   - lockstep：`hold_steps == 0`、実行された行動が チャンク0の0〜9 → チャンク1の0〜9 …
-   - sync, L=150ms（k=3）：各チャンクの前に hold が3つ入る
-   - async, L=150ms, threshold=5：hold が0、チャンクの切り替わりで先頭3つが捨てられる
-   - async, Lが非常に大きい：キューが枯れて hold が発生する
-5. **`run_eval`（2時間）**：21章の環境、22章の方策、executorをつなぐ。エピソードごとに方策のノイズのシードを `hash((seed, task, init_state))` から決める。
-6. **モードBの実行（D5）**：上位3設定（28章）× `libero_object` 10タスク × 5エピソード。
-7. **モードCの実行（D6〜D7）**：6節の計画に従う。
-8. **壁時計方式での確認（任意、2時間）**：環境のステップを20Hzのタイマーで回すスレッドと、推論するスレッド（またはvla-serverへの非同期リクエスト）を分けて、1設定だけ実行する。仮想時間方式の結果と矛盾しないことを確かめる。
+各 Step は「**読む → 埋める → 動かす → 確かめる**」の1サイクルです。executor は、**偽の方策が出す行動に「何番目の推論の、何番目の行動か」が書いてある**ので、環境が受け取った行動の列を見るだけでタイミングが正しいか分かります（`tests/sim/fakes.py`）。
+
+### Step 0：準備（10分）
+
+```bash
+source .venv-bench/bin/activate
+grep -n "【穴" src/evla/sim/{latency,executor,closed_loop}.py src/evla/analysis/stats.py scripts/eval_closed_loop.py
+pytest tests/sim tests/analysis/test_stats.py -q        # まだ失敗する
+```
+
+`tests/sim/fakes.py` を読み、`FakePolicy` の行動 `[推論番号+1, チャンク内の位置, 1.0]` と、`FakeEnv.tags()` が返す `(推論番号, 位置)`（hold は `None`）を理解しておきます。
+
+- [ ] 穴19個が表示され、テストが失敗する
+- [ ] `FakeEnv.tags()` の戻り値の意味を説明できる
+
+### Step 1：遅延モデル ― `latency.py`（穴①②、15分）
+
+**読む**：4.1節の「時間の考え方」。シミュレーション上の遅延は、実測値とは別に決められる（それが仮想時間方式の利点）。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | 実測値を、端末の差に見立てて伸び縮みさせる（例：Jetson は2倍遅い、と仮定する） |
+| ② | 実測の分布から1つ選ぶ。ジッタ（ばらつき）も再現できる。`rng`（Generator）のメソッドを使う |
+
+**動かす**
+
+```bash
+pytest tests/sim/test_latency.py -v
+```
+
+- [ ] 4つのテストがすべて `PASSED`
+
+### Step 2：同期と非同期の executor ― `executor.py`（穴①〜⑦、2〜3時間）
+
+**読む**：4.1節のシーケンス図。紙に「ステップ番号（横軸）と、そのステップで実行される行動」を書き、次の3つの場合を手で追ってから埋めます（L=150ms、20Hz なので k=3）。
+
+- lockstep：推論中も時間が止まる
+- sync：推論中の k ステップは hold を送る
+- async：キューの残りが閾値以下になったら推論を開始し、k ステップ後に到着したチャンクの古い先頭 k 個を捨てる
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | 遅延 L[ms] の間に進むステップ数。半端なステップも1ステップ待つので**切り上げ**（`self.dt_ms` を使う） |
+| ② | 推論中の k ステップぶんの繰り返し |
+| ③ | チャンクの先頭 `n_exec` 個（実行ホライズン） |
+| ④ | 推論を始める条件：キューの残りが閾値以下（`pending is None` は「推論中でない」の意味） |
+| ⑤ | 今のステップ t から k ステップ後が到着の時刻 |
+| ⑥ | 到着したチャンクのうち、推論中に過ぎた k 個を飛ばして、そこから `n_exec` 個 |
+| ⑦ | キューの**先頭**から1つ取り出す（右端からではない） |
+
+**動かす**：まずタイミングを目で見ます。
+
+```bash
+python - <<'EOF'
+import numpy as np
+from evla.sim.executor import AsyncExecutor, ExecutorConfig, SyncExecutor
+from evla.sim.latency import ConstantLatency
+from tests.sim.fakes import OBS, FakeEnv, FakePolicy
+
+for cls, mode in [(SyncExecutor, "lockstep"), (SyncExecutor, "sync"), (AsyncExecutor, "async")]:
+    env = FakeEnv()
+    ex = cls(ExecutorConfig(mode=mode, noise_dim=None), FakePolicy(), ConstantLatency(150), np.random.default_rng(0))
+    ok, tr = ex.run(env, OBS, 30)
+    print(f"{mode:8s}", " ".join("--" if t is None else f"{t[0]}.{t[1]}" for t in env.tags()))
+    print(f"{'':8s} hold={tr.hold_steps} discarded={tr.discarded_actions} infer_steps={tr.infer_steps}")
+EOF
+pytest tests/sim/test_executor.py -v
+```
+
+**確かめる**
+
+- [ ] lockstep：`0.0 0.1 … 0.9 1.0 1.1 …` と hold なしで続く
+- [ ] sync：`-- -- -- 0.0 … 0.9 -- -- -- 1.0 …`（各チャンクの前に hold が3つ）
+- [ ] async：`-- -- -- 0.0 … 0.7 1.3 1.4 1.5 …`（最初の1回だけ hold。2回目のチャンクは先頭3つ `1.0〜1.2` が捨てられ、`1.3` から始まる）
+- [ ] 6つのテストがすべて `PASSED`（特に `test_async_queue_starves_when_latency_is_large`：遅延が大きいと非同期でもキューが枯れる）
+- [ ] 手で書いた紙の図と、出力が一致している
+
+### Step 3：成功率の統計 ― `stats.py`（穴①〜⑦、1時間）
+
+**読む**：6.2節。Wilson の信頼区間と McNemar 検定の式を、docstring で確認する。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | 95% のときの z（約1.96）を、`alpha` から計算する。正規分布の累積分布関数の**逆関数**（`scipy.stats.norm` のメソッド） |
+| ②③ | Wilson の式。docstring の式をそのまま書く |
+| ④ | 対応のある比較で、意味があるのは**食い違った組**だけ。下の行（`b10`）と対になる条件 |
+| ⑤ | 食い違いが A 寄りか B 寄りかは半々、を帰無仮説にした正確二項検定（`scipy.stats` の関数。`p=0.5`） |
+| ⑥ | 検出力（power）に対応する z。①と同じ関数 |
+| ⑦ | 検出したい差の2乗。差が半分になると、必要な試行数は約4倍になる |
+
+**動かす**
+
+```bash
+pytest tests/analysis/test_stats.py -v
+python -c "
+from evla.analysis.stats import wilson_ci, required_n
+print([round(x, 2) for x in wilson_ci(35, 50)], required_n(0.9, 0.75), required_n(0.9, 0.8))
+"
+```
+
+**確かめる**
+
+- [ ] 5つのテストがすべて `PASSED`
+- [ ] `wilson_ci(35, 50)` が約 `[0.56, 0.81]`（6.2節の目安）。n=50 でも区間の幅が25ポイントもあることを実感する
+- [ ] `required_n` の2つの値を比べ、「10ポイントの差」と「15ポイントの差」で必要な試行数がどれだけ違うかをメモに残す
+
+### Step 4：閉ループの評価 ― `closed_loop.py`（穴①②）と `scripts/eval_closed_loop.py`（穴①）（1時間）
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| `closed_loop.py` ① | Python の `hash()` は実行ごとに値が変わる（PYTHONHASHSEED）。バイト列から**決定的な**整数を作る `zlib` の関数を使う |
+| `closed_loop.py` ② | Step 2 で作った executor でエピソードを回す |
+| `eval_closed_loop.py` ① | Step 3 で作った信頼区間 |
+
+**動かす**：まず1タスク×1エピソードで試運転します。
+
+```bash
+python -c "from evla.sim.closed_loop import episode_seed; print(episode_seed(0, 3, 1), episode_seed(0, 3, 1))"
+MUJOCO_GL=egl python scripts/eval_closed_loop.py --config configs/closed_loop/modeB_lockstep.yaml \
+  --set "task_ids=[0]" --set episodes_per_task=1
+```
+
+**確かめる**
+
+- [ ] 1行目の2つの数が同じ（別のプロセスで実行しても同じ値になる）
+- [ ] `<run_id>: success 1/1 = 1.00  95%CI [0.21, 1.00]` のように表示され、run のディレクトリに `episodes.parquet` ができる
+
+### Step 5：本番の実行（D5〜D7、夜間に回す）
+
+- [ ] **モードB**：`configs/closed_loop/modeB_lockstep.yaml` をそのまま（10タスク×5エピソード）。PyTorch FP32 の成功率を参照値（約90%）と比べる。続けて、28章で選んだ上位3設定（`--set policy.runtime=...` など）を回す
+- [ ] **モードC（遅延許容曲線）**：`modeC_async.yaml` を `--set executor.mode=sync` にし、`--set latency.ms=...` と `--set executor.n_exec=...` を6.1節の表のとおりに変えて回す（28章の掃引で回すと楽）
+- [ ] **同期と非同期の比較**：n_exec=25 で `executor.mode` を `sync` / `async` に、`async_threshold` を2水準にして回し、成功率・`hold_steps`・`discarded_actions` を表にする
+- [ ] 2つの設定の差は、`mcnemar()` に同じ (task, init_state) の順に並べた成功の列を渡して検定する
+
+**壁時計方式での確認（任意、2時間）**：環境のステップを20Hzのタイマーで回すスレッドと、推論するスレッド（またはvla-serverへの非同期リクエスト）を分けて、1設定だけ実行する。仮想時間方式の結果と矛盾しないことを確かめる。
+
+### Step 6：仕上げ（10分）
+
+- [ ] 5ファイルの先頭の `from evla._blank import ___` を消し、`ruff check src/evla/sim src/evla/analysis/stats.py scripts/eval_closed_loop.py` を通す
+- [ ] `pytest tests/sim tests/analysis/test_stats.py` がすべて通る
+- [ ] コミットする
 
 ## 6. ベストプラクティス
 

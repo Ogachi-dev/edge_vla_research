@@ -1,9 +1,9 @@
 # track1/22. ランタイム共通のPolicy抽象と数値一致の検証
 
-> **穴埋め版**（進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
-> - 埋めるファイル（穴の数）：`src/evla/policy/factory.py`（1）、`src/evla/policy/preprocess.py`（5）、`src/evla/policy/equivalence.py`（6）、`scripts/check_equivalence.py`（2）
-> - テスト：`pytest tests/policy`
-> - 「5. 実装手順」は、ゼロから書く場合の手順です。穴埋め版では、手順の中の**確認作業**（動作確認・測定・完了条件）を行い、コードは穴を埋めるだけで足ります。
+> **ハンズオン**（共通の進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - この章で埋める穴：**14個**（`src/evla/policy/` の `factory.py` 1、`preprocess.py` 5、`equivalence.py` 6、`scripts/check_equivalence.py` 2）
+> - ゴール：`pytest tests/policy` がすべて通る。23章のあとで、PyTorch FP32 どうしの一致表（max_abs=0）が出る
+> - 進め方：Step 1〜4 はモデルなしでできる。Step 5 は23章（PyTorch 版）が動いてから戻ってくる
 
 ## 1. 目的と計画書の対応
 
@@ -108,15 +108,138 @@ def make_policy(cfg: PolicyConfig) -> Policy:
     import はこの関数の中で遅延して行う（使わないランタイムのライブラリを読み込まない）。"""
 ```
 
-## 5. 実装手順
+## 5. ハンズオン
 
-1. `base.py` を書く（インタフェースだけ）。
-2. `equivalence.py` を実装し、テストを書く（同一配列でmax_abs=0・cosine=1、符号反転でcosine=-1、など）。
-3. `factory.py` を書く。最初は `torch` だけ対応し、他は `NotImplementedError` にする。
-4. 23章でPyTorchのアダプタができたら、`scripts/check_equivalence.py` を作る。
-   - 固定観測（21章）×固定ノイズ（seed=0）で、PyTorch FP32 を基準（ref）とする。
-   - 各ランタイム・精度の出力と比較し、`EquivalenceReport` を表にする。
-5. 24・25章でアダプタが増えるたびに、この表に行を足す。
+各 Step は「**読む → 埋める → 動かす → 確かめる**」の1サイクルです。
+
+### Step 0：準備（5分）
+
+```bash
+source .venv-bench/bin/activate
+grep -n "【穴" src/evla/policy/{factory,preprocess,equivalence}.py scripts/check_equivalence.py
+pytest tests/policy -q          # まだ失敗する
+```
+
+- [ ] 穴14個が表示され、テストが `NotImplementedError` で失敗する
+
+### Step 1：インタフェースを読む ― `base.py`（穴なし、20分）
+
+`src/evla/policy/base.py` は穴のない完成版です。次の3つに答えられるまで読みます（答えはメモに1行ずつ）。
+
+- [ ] `Policy` が**状態を持たない**のはなぜか（キューはどこで持つか）
+- [ ] `predict_chunk` の `noise` 引数は、何のためにあるか（Step 5 の一致の確認で使う）
+- [ ] `with make_policy(cfg) as policy:` と書くと、ブロックを出たときに何が呼ばれるか
+
+### Step 2：一致の指標 ― `equivalence.py`（穴①〜⑥、40分）
+
+ランタイムを替えたとき「同じ行動を出しているか」を数値で測る道具です。
+
+**読む**：4節の `EquivalenceReport` と、`tests/policy/test_equivalence_metrics.py`。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | 最悪の1要素。「どこか1か所でも大きくずれたか」を見る |
+| ② | 全体の平均的なずれ。①と並べると、ずれが一部だけか全体かが分かる |
+| ③ | 向きの一致（大きさは無視）。値の尺度が違っても比べられる |
+| ④ | `(時間, 次元)` の配列で、どちらの軸に沿って最大をとれば「次元ごと」になるか |
+| ⑤ | グリッパは「開くか閉じるか」が重要。値の差より、符号の食い違いを数える |
+| ⑥ | NumPy の新しい乱数 API。シードを渡して、全ランタイムで同じノイズを作る |
+
+**動かす**
+
+```bash
+pytest tests/policy/test_equivalence_metrics.py -v
+python -c "
+import numpy as np
+from evla.policy.equivalence import compare_chunks
+a = np.random.default_rng(0).normal(size=(50, 7))
+print(compare_chunks(a, -a))           # 全部の符号を反転
+print(compare_chunks(a, a + 1e-3))     # わずかにずらす
+"
+```
+
+**確かめる**
+
+- [ ] 4つのテストがすべて `PASSED`
+- [ ] 符号反転：`cosine=-1.0`、`gripper_sign_flips` が 50 前後（0 の要素がなければ 50）
+- [ ] わずかなずれ：`max_abs≈0.001`、`cosine` がほぼ 1。①②③の違いを、この2例で説明できる
+
+### Step 3：前処理 ― `preprocess.py`（穴①〜⑤、40分）
+
+ランタイム間で前処理が1ピクセルでも違うと、一致の表が意味をなさなくなります。だから共通の関数にしています。
+
+**読む**：`resize_with_pad` の docstring の【要確認】（埋める側が「左と上」であること）。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | 画素値の正規化。整数で割ると切り捨てになるので、浮動小数で割る |
+| ② | 画像の並び。NumPy・OpenCV は `(H, W, C)`、PyTorch は `(C, H, W)`。`transpose` の軸の順を考える |
+| ③ | 縦と横のうち、**大きい方の比**で縮める（そうしないと長辺がはみ出す） |
+| ④ | `F.interpolate` の `size` は `(高さ, 幅)` の順 |
+| ⑤ | `F.pad` の埋め幅は**最後の軸から**（左, 右, 上, 下）の順。左と上を埋め、右と下は0 |
+
+**動かす**
+
+```bash
+pytest tests/policy/test_preprocess.py -v
+python -c "
+import numpy as np
+from evla.policy.preprocess import resize_with_pad
+y = resize_with_pad(np.ones((3, 480, 640), np.float32), 512)
+print(y.shape, 'pad rows:', int((y[0].max(axis=1) == 0).sum()), 'pad cols:', int((y[0].max(axis=0) == 0).sum()))
+"
+```
+
+**確かめる**
+
+- [ ] 3つのテストがすべて `PASSED`（`test_resize_with_pad_keeps_aspect` が `SKIPPED` なら torch が入っていない → [env/12](../env/12_inference_envs.md) Step 1）
+- [ ] `(3, 512, 512) pad rows: 128 pad cols: 0`。640×480 → 512×384 に縮み、上に 128 行の埋めが入る
+
+### Step 4：ランタイムの切り替え ― `factory.py`（穴①、10分）
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | 他の分岐と同じ形。import を関数の中に書く理由（使わないランタイムのライブラリを読み込まない）も確認する |
+
+**動かす**
+
+```bash
+python -c "
+from evla.policy.base import PolicyConfig
+from evla.policy.factory import make_policy
+make_policy(PolicyConfig(runtime='foo', model='x'))
+"
+```
+
+- [ ] `ValueError: 未知のランタイム: foo` で終わる（`torch` の分岐は23章で動かす）
+
+### Step 5：一致の表を作る ― `scripts/check_equivalence.py`（穴①②、23章のあと、30分）
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | `argparse` の `nargs`。`--test a.yaml b.yaml c.yaml` のように1個以上受け取る |
+| ② | 観測ごとの `rmse` の平均（`reps` は観測ごとの `EquivalenceReport` のリスト） |
+
+**動かす**：まず同じ設定どうしで比べ、**決定性**を確かめます。
+
+```bash
+python scripts/check_equivalence.py --fixed_obs data/fixed_obs/libero_object_t0.npz \
+  --ref configs/policy/torch_fp32.yaml --test configs/policy/torch_fp32.yaml --n 3 \
+  --out reports/equivalence_libero.md
+```
+
+**確かめる**
+
+- [ ] 表の `max_abs` が `0.0`、`cosine_min` が `1.0`（0 でなければ、どこかに乱数か非決定的な並列化がある）
+- [ ] 24・25章でアダプタができるたびに、`--test` に設定を足して表を更新する。次の目安と比べる
 
 **比較の目安（vla.cppのOVバックエンド文書の値を参考にした）**：
 
@@ -127,6 +250,12 @@ def make_policy(cfg: PolicyConfig) -> Policy:
 | FP32 と BF16 / FP16 | 1e-3〜1e-2 | 精度の違い。vla.cppでは、SmolVLAはこの1フラグだけで2e-3動く |
 | FP32 と INT8 / Q4_0 | 1e-2〜1e-1 | 量子化誤差。成功率で影響を確かめる |
 | 0.5以上、またはグリッパの符号反転が多い | — | **前処理のずれを疑う**（画像の向き、正規化、トークナイズの改行） |
+
+### Step 6：仕上げ（10分）
+
+- [ ] 4ファイルの先頭の `from evla._blank import ___` を消し、`ruff check src/evla/policy scripts/check_equivalence.py` を通す
+- [ ] `pytest tests/policy` がすべて通る
+- [ ] コミットする
 
 ## 6. ベストプラクティス
 
@@ -178,7 +307,7 @@ DataFrame(rows).groupby(cfgの列).agg(max) → Markdown表で出力
 
 - [ ] `pytest tests/policy` が通る
 - [ ] `scripts/check_equivalence.py` が、少なくとも「PyTorch FP32 対 PyTorch FP32（2回目）」の行を出し、max_abs=0 になる（決定性の確認）
-- [ ] 24・25章の完了時点で、全ランタイム・精度の一致表が `reports/equivalence.md` にある
+- [ ] 24・25章の完了時点で、全ランタイム・精度の一致表が `reports/equivalence_libero.md` にある
 
 ## 10. 理解度チェック・発展課題
 

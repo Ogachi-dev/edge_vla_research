@@ -1,9 +1,9 @@
 # env/12. 推論環境：uvのvenvとvla.cppのビルド
 
-> **穴埋め版**（進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
-> - 埋めるファイル（穴の数）：`scripts/gen_vla_proto.sh`（1）
-> - テスト：なし（「9. 完了条件」で確認）
-> - 「5. 実装手順」は、ゼロから書く場合の手順です。穴埋め版では、手順の中の**確認作業**（動作確認・測定・完了条件）を行い、コードは穴を埋めるだけで足ります。
+> **ハンズオン**（共通の進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - この章で埋める穴：**1個**（`scripts/gen_vla_proto.sh`）。ほとんどは環境構築の作業です
+> - ゴール：`.venv-bench` で `import lerobot, openvino, physicalai` が通り、vla.cpp の CPU 版で `vla-bench` の結果表が出る
+> - 進め方：5節の Step を順に実行し、各 Step の「確かめる」を全部チェックしてから次へ進む。SYCL（Step 4）と OV（Step 5）は、時間を決めて打ち切ってよい
 
 ## 1. 目的と計画書の対応
 
@@ -29,7 +29,7 @@
 | `third_party/vla.cpp/`（submodule、コミット固定） | vla.cpp のソース |
 | `third_party/vla.cpp/build{,-sycl,-ov}/` | バックエンドごとのビルドディレクトリ |
 | `scripts/vla_env.sh` | vla.cpp を使うときの環境変数（setvarsなど）をまとめたもの |
-| `src/evla/ipc/gen/vla_pb2.py` | `vla.proto` から生成した Python スタブ |
+| `src/evla/policy/_proto/vla_pb2.py` | `vla.proto` から生成した Python スタブ（`scripts/gen_vla_proto.sh` で生成。git では管理しない） |
 
 ## 4. インタフェース仕様
 
@@ -77,14 +77,17 @@ esac
 # TODO(you): VLA_N_THREADS は、ここではなく実験スクリプト側で毎回明示的に設定する
 ```
 
-## 5. 実装手順
+## 5. ハンズオン
 
-### Step 1：uv の導入と `.venv-bench`（1〜2時間）
+各 Step は「**実行する → 出力を確かめる → 記録する**」の1サイクルです。出力は `docs/notes/` のその日のメモに貼っておくと、後で報告書の「環境」の節にそのまま使えます。
+
+### Step 1：`.venv-bench` を完成させる（1〜2時間）
+
+[01](../01_repository_design.md) の Step 0 で最小の `.venv-bench` を作っていれば、`uv venv` は飛ばして `source` から始めます。
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
 export UV_LINK_MODE=copy          # WSLでのハードリンク警告を避ける（vla.cppのWSL文書でも推奨）
-uv venv -p 3.12 .venv-bench
+uv venv -p 3.12 .venv-bench       # 01 で作っていれば不要
 source .venv-bench/bin/activate
 ```
 
@@ -95,17 +98,23 @@ uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cp
 uv pip install "lerobot[smolvla,libero]==0.6.1"   # TODO(you): 4.1で確定した版
 uv pip install openvino nncf physicalai pyzmq protobuf grpcio-tools psutil pandas pyarrow matplotlib
 uv pip install -e ".[bench,dev]"                    # 自作パッケージ evla
-uv pip freeze > requirements/bench.lock.txt
+mkdir -p requirements && uv pip freeze > requirements/bench.lock.txt
 ```
 
-確認：
+**動かす**
 
 ```bash
-python -c "import torch; print(torch.__version__, torch.cuda.is_available())"   # False が正しい
-python -c "import lerobot, openvino as ov; print(lerobot.__version__, ov.Core().available_devices)"
+python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+python -c "import lerobot, openvino as ov, physicalai; print(lerobot.__version__, ov.Core().available_devices)"
 ```
 
-- 2つ目のinstallで torch が CUDA 版に置き換わっていないか確認する（`torch.__version__` が `+cpu` で終わるか）。置き換わった場合は、`uv pip install` に `--torch-backend cpu` を付けて入れ直す（**【要確認】** uv のバージョンによる）。
+**確かめる**
+
+- [ ] 1行目が `2.x.x+cpu False` のように、`+cpu` で終わり、`False` になっている
+- [ ] 2行目に lerobot の版と、`['CPU', 'GPU']` が出る（`GPU` が無ければ [env/10](10_wsl2_and_igpu.md) の Step 3 に戻る）
+- [ ] `requirements/bench.lock.txt` ができている
+
+torch が CUDA 版に置き換わっていたら（`+cpu` が無い）、`uv pip install` に `--torch-backend cpu` を付けて入れ直す（**【要確認】** uv のバージョンによる）。
 
 ### Step 2：`.venv-export`（30分。D8までに準備すればよい）
 
@@ -114,7 +123,11 @@ uv venv -p 3.12 .venv-export
 source .venv-export/bin/activate
 uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 uv pip install "physicalai-train[nncf]==0.3.0"
+python -c "import physicalai, nncf; print('ok')"
+deactivate
 ```
+
+- [ ] `ok` が表示される
 
 ### Step 3：vla.cpp CPUビルド（1時間）
 
@@ -126,24 +139,37 @@ cd third_party/vla.cpp && git checkout <固定するコミット>   # TODO(you)
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j"$(nproc)"
 ./build/vla-bench -hf vrfai/smolvla-libero-gguf --images 2 --size 512 --markdown
+cd -
 ```
 
-- 動作確認だけなら、ビルド済みバイナリ（`linux-x86_64-cpu`、AVX2が必要）を使ってもよい。ただし本番の計測では、**自分でビルドしたもの**（`GGML_NATIVE=ON` でこのCPU向けに最適化される）を使い、コミットを記録する。
+**確かめる**
+
+- [ ] `vla-bench` が Markdown の表（ステージごとの時間）を出す。その表をメモに貼る
+- [ ] `git -C third_party/vla.cpp rev-parse HEAD` のコミットをメモに残す
+
+動作確認だけなら、ビルド済みバイナリ（`linux-x86_64-cpu`、AVX2が必要）を使ってもよい。ただし本番の計測では、**自分でビルドしたもの**（`GGML_NATIVE=ON` でこのCPU向けに最適化される）を使う。
 
 ### Step 4：vla.cpp SYCLビルド（2〜3時間。うまくいかなければ打ち切る）
 
 1. compute runtime が入っていることを確認する（[env/10](10_wsl2_and_igpu.md)）。
 2. oneAPIを入れる。Deep Learning Essentials で足りる（DPC++、oneMKL、oneDNN）。
-3. `source /opt/intel/oneapi/setvars.sh` → `sycl-ls` で `[level_zero:gpu]` または `[opencl:gpu]` が出ることを確認する。
+3. `source /opt/intel/oneapi/setvars.sh` → `sycl-ls` を実行する。
 4. ビルドする（**ビルドディレクトリは新しく作る**。コンパイラを途中で替えたディレクトリは壊れる）。
 
 ```bash
+cd third_party/vla.cpp
 cmake -B build-sycl -G Ninja -DCMAKE_BUILD_TYPE=Release -DGGML_SYCL=ON \
       -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx
 cmake --build build-sycl -j"$(nproc)"
+./build-sycl/vla-bench -hf vrfai/smolvla-libero-gguf --images 2 --size 512 --markdown
+cd -
 ```
 
-5. 起動時のバナーに `backend = SYCL (device 0: Intel(R) Iris(R) Xe ...)` と出ることを確認する。`CPU` と出たら、GPUが見えていない。
+**確かめる**
+
+- [ ] `sycl-ls` に `[level_zero:gpu]` または `[opencl:gpu]` が出る
+- [ ] 起動時のバナーに `backend = SYCL (device 0: Intel(R) Iris(R) Xe ...)` と出る（`CPU` と出たら、GPUが見えていない）
+- [ ] 動かなかった場合も、エラーと試したことをメモに残して先へ進む（DoD はそれで満たせる）
 
 ### Step 5：vla.cpp OpenVINOバックエンド（1〜2時間）
 
@@ -151,19 +177,40 @@ cmake --build build-sycl -j"$(nproc)"
 2. `source /opt/intel/openvino/setupvars.sh` を読んでからビルドする。
 
 ```bash
+cd third_party/vla.cpp
 cmake -B build-ov -G Ninja -DCMAKE_BUILD_TYPE=Release -DGGML_OPENVINO=ON
 cmake --build build-ov -j"$(nproc)"
 GGML_OPENVINO_DEVICE=GPU ./build-ov/vla-bench -hf vrfai/smolvla-libero-gguf --images 2 --size 512 --markdown
+cd -
 ```
 
-3. 起動ログの `OpenVINO: using device GPU`（ggml側の行が正）を確認する。
+**確かめる**
 
-### Step 6：Python スタブの生成（15分）
+- [ ] 起動ログに `OpenVINO: using device GPU`（ggml側の行が正）が出る
+- [ ] CPU 版（Step 3）の表と並べて、メモに貼る
+
+### Step 6：Python のプロトコルモジュールを生成する ― `scripts/gen_vla_proto.sh`（穴①、15分）
+
+vla.cpp のサーバー（25章）と話すための `vla_pb2.py` を、`vla.proto` から生成します。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | `protoc` は出力する言語ごとにオプションがある。Python 用のものを選ぶ（`python -m grpc_tools.protoc --help` で一覧が見られる） |
+
+**動かす**
 
 ```bash
-python -m grpc_tools.protoc -I third_party/vla.cpp/src/serving \
-  --python_out=src/evla/ipc/gen third_party/vla.cpp/src/serving/vla.proto
+source .venv-bench/bin/activate
+bash scripts/gen_vla_proto.sh
+python -c "from evla.policy._proto import vla_pb2; print([m for m in dir(vla_pb2) if m[0].isupper()][:10])"
 ```
+
+**確かめる**
+
+- [ ] `generated: src/evla/policy/_proto/vla_pb2.py` と表示される
+- [ ] 2つ目のコマンドで、`vla.proto` に定義されたメッセージ名が並ぶ（`vla.proto` を開いて見比べる）
 
 ## 6. ベストプラクティス
 
@@ -212,7 +259,7 @@ for b in cpu sycl ov:
 - [ ] `requirements/bench.lock.txt` がコミットされている
 - [ ] vla.cpp CPU版の `vla-bench`（SmolVLA、2視点、512px）の結果表がある
 - [ ] SYCL版とOV版それぞれについて、「動いた（バナーでGPUを確認）」または「動かなかった（エラーと試したこと）」がメモにある
-- [ ] `src/evla/ipc/gen/vla_pb2.py` が生成され、`from evla.ipc.gen import vla_pb2` が通る
+- [ ] `src/evla/policy/_proto/vla_pb2.py` が生成され、`from evla.policy._proto import vla_pb2` が通る
 
 ## 10. 理解度チェック・発展課題
 

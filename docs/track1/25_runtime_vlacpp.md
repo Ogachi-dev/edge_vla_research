@@ -1,9 +1,9 @@
 # track1/25. vla.cppランタイム（GGUF：CPU / SYCL / OpenVINOバックエンド）
 
-> **穴埋め版**（進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
-> - 埋めるファイル（穴の数）：`src/evla/policy/vlacpp_server.py`（7）、`src/evla/policy/vlacpp_policy.py`（11）、`scripts/vlacpp_quantize.sh`（1）、`scripts/vlabench_reference.sh`（1）
-> - テスト：なし（「9. 完了条件」で確認）
-> - 「5. 実装手順」は、ゼロから書く場合の手順です。穴埋め版では、手順の中の**確認作業**（動作確認・測定・完了条件）を行い、コードは穴を埋めるだけで足ります。
+> **ハンズオン**（共通の進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - この章で埋める穴：**20個**（`src/evla/policy/vlacpp_server.py` 7、`src/evla/policy/vlacpp_policy.py` 11、`scripts/vlacpp_quantize.sh` 1、`scripts/vlabench_reference.sh` 1）
+> - ゴール：`with VlaServerProcess(...)` で vla-server を起動・推論・終了でき、22章の一致表に vla.cpp（CPU）の行が入る
+> - テスト：サーバーが必要なので pytest はなし。Step 1〜2 は**偽のサーバー**と**送信内容の復元**で、vla.cpp なしで確かめられる
 
 ## 1. 目的と計画書の対応
 
@@ -55,7 +55,7 @@ message PredictResponse {
 | `src/evla/policy/vlacpp_policy.py` | `VlaCppPolicy(Policy)`：ZeroMQクライアント |
 | `scripts/vlacpp_quantize.sh` | GGUFの量子化版（Q8_0、Q4_0、`--vision` あり/なし）を作る |
 | `scripts/vlabench_reference.sh` | `vla-bench` を公開ベンチと同じ手順（ウォームアップ3回＋計測20回×3プロセス）で回す |
-| `tests/policy/test_vlacpp_policy.py` | サーバーを実際に起動して1回推論する（重いので `@pytest.mark.slow`） |
+| （5節 Step 1〜3 のコマンド） | 偽のサーバーでの起動・終了、送信内容の復元、実際のサーバーでの推論の確認。専用のテストは作らない |
 
 ## 4. インタフェース仕様
 
@@ -100,22 +100,198 @@ class VlaCppPolicy(Policy):
         transport = (クライアントで測った往復時間) - latency_ms_total を入れる。"""
 ```
 
-## 5. 実装手順
+## 5. ハンズオン
 
-1. **サーバー管理（2時間）**
-   - `subprocess.Popen(..., stdout=PIPE, stderr=STDOUT, env=...)` で起動し、別スレッドで標準出力を読んで `ready` の行を待つ。
-   - バナーから `backend = ...` の行（SYCL）や `OpenVINO: using device ...` の行（OV）を拾い、`expect_backend` と照合する。**一致しなければ例外にする**（黙ってCPUにフォールバックした結果を測らないため）。
-   - 終了時は SIGTERM → `wait(timeout=10)` → SIGKILL。`atexit` にも登録して、ゾンビプロセスを残さない。
-2. **クライアント（2時間）**
-   - `vla_cpp_client.py` を**読んで理解したうえで**、`_encode` を自分で実装する（コピーしない）。
-   - リサイズは `resize_with_pad`（アスペクト比を保って縮小し、余白を0で埋める）。LeRobot の SmolVLA と同じ方式であることを確認する。
-3. **一致の確認（1時間）**：22章の比較表にvla.cpp（CPU、既定のweight-dtype）を追加する。固定ノイズは `noise` フィールドで渡す（`chunk_size × max_action_dim` = 50×32 を平坦化）。
-4. **量子化版の作成（1時間）**
-   - vla.cppの変換用venv（`python3 -m venv .venv-converter` → `pip install -e ".[convert]"`。vla.cppのディレクトリで実行）を作る。
-   - 公開GGUF（`vrfai/smolvla-libero-gguf` の `smolvla-libero.gguf`）から、`scripts/quantize_gguf.py --in ... --out ...-q8_0.gguf --type Q8_0` で量子化版を作る。Q4_0も同様。`--vision` を付けた版（ビジョン部も量子化する）も作る。
-   - **【要確認】** 公開GGUFの重みの型（bf16かf16か）を `gguf` パッケージ（`gguf-dump`）で確認し、メモに残す。
-5. **バックエンドの切り替え（1時間）**：CPU / SYCL / OV-GPU の各ビルドで、同じクライアントが動くことを確認する。
-6. **参照ベンチ（30分）**：`vla-bench -hf vrfai/smolvla-libero-gguf --images 2 --size 512 --markdown` を、公開ベンチと同じ手順で回す。**自作ベンチ（26章）の値との差＝前処理と通信のオーバーヘッド**になる。
+各 Step は「**読む → 埋める → 動かす → 確かめる**」の1サイクルです。この章は「プロセスの管理」と「通信の中身」に分かれます。どちらも、vla.cpp を動かす前に**偽物**で確かめられるようにしてあります。
+
+### Step 0：準備（10分）
+
+```bash
+source .venv-bench/bin/activate
+grep -n "【穴\|【要確認】" src/evla/policy/vlacpp_{server,policy}.py scripts/vlacpp_quantize.sh scripts/vlabench_reference.sh
+ls src/evla/policy/_proto/vla_pb2.py              # 無ければ env/12 の Step 6
+ls third_party/vla.cpp/build/vla-server           # env/12 の Step 3 でビルドしたもの
+third_party/vla.cpp/build/vla-server --help       # 引数名を確かめる（_cmd の【要確認】）
+```
+
+- [ ] 穴20個が表示され、`vla_pb2.py` と `vla-server` がある
+- [ ] `--help` の引数名（`-m`、`--bind`）が `_cmd()` と合っている。違えば直す
+
+### Step 1：サーバーの起動と終了 ― `vlacpp_server.py`（穴①〜⑦、1.5時間）
+
+**読む**：4節の `VlaServerProcess`。「起動 → 標準出力を別スレッドで読む → `ready` の行で合図 → 本体は合図を待つ」の流れを図にする。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | 正規表現が**文字列のどこかに**一致するか。先頭だけを見るメソッドとの違いに注意 |
+| ② | 起動完了の行に含まれる語（docstring の例を見る） |
+| ③④⑤ | スレッド間の合図（`threading.Event`）。読む側が `set`、待つ側が `wait`。④はエラーの出力も同じパイプで読むための指定 |
+| ⑥⑦ | 終了の作法。まず終了を頼むシグナル、応じなければ強制終了 |
+
+**動かす**：`ready` と言って眠るだけの**偽のサーバー**で確かめます。
+
+```bash
+printf '#!/bin/sh\necho "backend = CPU"\necho "vla-server bound to tcp://*:5555. ready."\nexec sleep 600\n' > /tmp/fake-vla-server
+chmod +x /tmp/fake-vla-server
+python - <<'EOF'
+from pathlib import Path
+from evla.policy.vlacpp_server import VlaServerConfig, VlaServerProcess, detect_backend
+
+cfg = VlaServerConfig(binary=Path("/tmp/fake-vla-server"), gguf=Path("x.gguf"), ready_timeout_s=5)
+with VlaServerProcess(cfg) as s:
+    pid = s.pid
+    print("pid:", pid, "banner:", s.banner, "backend:", detect_backend(s.banner))
+print("alive after exit:", Path(f"/proc/{pid}").exists())
+
+try:
+    with VlaServerProcess(VlaServerConfig(binary=Path("/tmp/fake-vla-server"), gguf=Path("x"), expect_backend="SYCL")):
+        pass
+except RuntimeError as e:
+    print("RuntimeError OK:", e)
+print(detect_backend(["OpenVINO: using device GPU"]), detect_backend(["ggml_sycl_init: found 1 device"]))
+EOF
+```
+
+**確かめる**
+
+- [ ] `banner` に2行が入り、`backend: CPU`
+- [ ] `alive after exit: False`（with を出たらプロセスが消えている＝ゾンビなし）
+- [ ] `RuntimeError OK: バックエンドが違う: 期待 SYCL、実際 CPU`（**黙ってCPUにフォールバックした結果を測らない**仕組み）
+- [ ] 最後の行が `OPENVINO SYCL`
+
+### Step 2：送るメッセージを作る ― `vlacpp_policy.py` の穴①〜⑧（1.5時間）
+
+**読む**：2.1の「クライアント側の責任」の表と、vla.cpp の `vla_cpp_client.py`（**読んで理解したうえで、コピーせずに**埋める）。
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | ZeroMQ のソケットの種類。「送って、返事を待つ」側（サーバー側と対になる） |
+| ②③ | ソケットのオプション。②は終了時に固まらないため、③は返事が来ないときに永久に待たないため |
+| ④ | 22章の②の逆変換（CHW → HWC） |
+| ⑤ | NumPy 配列を、そのままのバイト列にする（protobuf の `bytes` に入れる） |
+| ⑥ | 指示文の末尾の改行。**これを忘れると行動が大きくずれる**（7節の落とし穴）。学習時の書式に合わせる |
+| ⑦ | 状態を32次元にゼロ埋めする。スライスで「先頭の実次元ぶん」を指定する |
+| ⑧ | `(50, 32)` を1次元に平坦化する |
+
+**動かす**：サーバーに送らずに、作ったバイト列を**復元して中身を見ます**。
+
+```bash
+python - <<'EOF'
+from pathlib import Path
+from evla.policy.base import PolicyConfig
+from evla.policy.equivalence import make_fixed_noise
+from evla.policy.vlacpp_policy import VlaCppPolicy
+from evla.sim.fixed_obs import load_fixed_obs
+
+obs = load_fixed_obs(Path("data/fixed_obs/libero_object_t0.npz"))[0]
+p = VlaCppPolicy(PolicyConfig(runtime="vlacpp", model="x"))     # connect はサーバーがなくても成功する
+raw = p._encode(obs, make_fixed_noise(50, 32, 0), request_id=7)
+req = p.pb.PredictRequest(); req.ParseFromString(raw)
+print("images:", [(im.height, im.width, len(im.data)) for im in req.images])
+print("state:", len(req.state), "noise:", len(req.noise), "id:", req.request_id)
+print("tokens:", len(req.lang_tokens), "last:", repr(p.tokenizer.decode(req.lang_tokens[-1:])))
+p.close()
+EOF
+```
+
+**確かめる**
+
+- [ ] `images: [(512, 512, 3145728), (512, 512, 3145728)]`（512×512×3×4バイト）
+- [ ] `state: 32 noise: 1600 id: 7`
+- [ ] `last: '\n'`（指示文の末尾が改行のトークン）
+
+### Step 3：受け取って、実際のサーバーで推論する ― 穴⑨〜⑪（1時間）
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ⑨ | Step 2 で使った「バイト列から復元する」メソッド |
+| ⑩ | 応答の平坦な配列を、応答に書いてある行数・列数で整形する（決め打ちしない） |
+| ⑪ | 時間の内訳。クライアントで測った往復時間から、サーバーの中で使った時間を引いた残りが「通信など」 |
+
+**動かす**
+
+```bash
+huggingface-cli download vrfai/smolvla-libero-gguf smolvla-libero.gguf --local-dir data/models/gguf
+python - <<'EOF'
+from pathlib import Path
+from evla.common.config import load_config
+from evla.policy.base import PolicyConfig
+from evla.policy.factory import make_policy
+from evla.policy.vlacpp_server import VlaServerConfig, VlaServerProcess
+from evla.sim.fixed_obs import load_fixed_obs
+
+obs = load_fixed_obs(Path("data/fixed_obs/libero_object_t0.npz"))[0]
+srv = VlaServerConfig(binary=Path("third_party/vla.cpp/build/vla-server"),
+                      gguf=Path("data/models/gguf/smolvla-libero.gguf"),
+                      env={"VLA_N_THREADS": "8"}, expect_backend="CPU",
+                      log_path=Path("results/smoke/vla-server.log"))
+with VlaServerProcess(srv), make_policy(load_config(Path("configs/policy/vlacpp_cpu.yaml"), PolicyConfig)) as p:
+    p.warmup(obs)
+    r = p.predict_chunk(obs)
+    print(r.actions.shape, {k: round(v, 1) for k, v in r.breakdown_ms.items()})
+EOF
+pgrep -a vla-server || echo "no vla-server"
+```
+
+**確かめる**
+
+- [ ] `(50, 7)` と内訳が表示され、`transport` が数ms程度の正の値
+- [ ] 最後に `no vla-server`
+- [ ] 22章の Step 5 で `--test configs/policy/vlacpp_cpu.yaml` を足す（**先に別の端末で vla-server を起動しておく**）。固定ノイズは `noise` フィールドで渡るので、PyTorch と直接比べられる
+
+### Step 4：量子化版を作る ― `scripts/vlacpp_quantize.sh`（穴①、1時間）
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | 同じループの2行目（`--vision` 付き）と見比べる |
+
+**動かす**（vla.cpp の変換用 venv で）
+
+```bash
+(cd third_party/vla.cpp && python3 -m venv .venv-converter && .venv-converter/bin/pip install -e ".[convert]")
+source third_party/vla.cpp/.venv-converter/bin/activate
+bash scripts/vlacpp_quantize.sh
+gguf-dump data/models/gguf/smolvla-libero.gguf | head -40     # 元の重みの型（【要確認】bf16 か f16 か）
+deactivate
+```
+
+**確かめる**
+
+- [ ] `data/models/gguf/` に `-q8_0`、`-q4_0`、それぞれの `-vision` 版の計4ファイルができる。サイズが小さくなっていく
+- [ ] 公開 GGUF の重みの型をメモに残す
+
+### Step 5：バックエンドの切り替えと参照ベンチ ― `scripts/vlabench_reference.sh`（穴①、1時間）
+
+**埋める**
+
+| 穴 | ねらい |
+| --- | --- |
+| ① | 連続実行で CPU が熱くなると、クロックが下がって後の回ほど遅くなる。プロセスの間に冷やす秒数（数十秒） |
+
+**動かす**
+
+```bash
+BUILD=build bash scripts/vlabench_reference.sh           # CPU
+BUILD=build-sycl bash scripts/vlabench_reference.sh      # SYCL（env/12 Step 4 が動いていれば）
+```
+
+- [ ] `results/vlabench/<日時>_<ビルド>/run{1,2,3}.md` ができる。3回の値のばらつきを見る
+- [ ] Step 3 の Python から、`binary` を `build-sycl` / `build-ov` に、`expect_backend` を `SYCL` / `OPENVINO` に替えて、同じクライアントで動くことを確かめる
+- [ ] `vla-bench` の値と自作クライアントの値の差（＝前処理と通信のオーバーヘッド）をメモに残す
+
+### Step 6：仕上げ（10分）
+
+- [ ] Python の2ファイルの先頭の `from evla._blank import ___` を消し、`ruff check src/evla/policy/vlacpp_*.py` を通す
+- [ ] `BACKEND_PATTERNS` の【要確認】を、実際のバナー（`results/smoke/vla-server.log`）に合わせて直した
+- [ ] コミットする
 
 ### 5.1 掃引に使うvla.cppの軸
 
