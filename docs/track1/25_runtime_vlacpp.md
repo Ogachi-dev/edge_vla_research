@@ -1,5 +1,10 @@
 # track1/25. vla.cppランタイム（GGUF：CPU / SYCL / OpenVINOバックエンド）
 
+> **穴埋め版**（進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - 埋めるファイル（穴の数）：`src/evla/policy/vlacpp_server.py`（7）、`src/evla/policy/vlacpp_policy.py`（11）、`scripts/vlacpp_quantize.sh`（1）、`scripts/vlabench_reference.sh`（1）
+> - テスト：なし（「9. 完了条件」で確認）
+> - 「5. 実装手順」は、ゼロから書く場合の手順です。穴埋め版では、手順の中の**確認作業**（動作確認・測定・完了条件）を行い、コードは穴を埋めるだけで足ります。
+
 ## 1. 目的と計画書の対応
 
 - vla.cppの `vla-server` をサブプロセスとして管理し、ZeroMQ＋protobufで通信する `Policy` アダプタを作る。

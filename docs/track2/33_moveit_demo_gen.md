@@ -1,5 +1,10 @@
 # track2/33. MoveItでのpick&placeデモ自動生成とランダム化
 
+> **穴埋め版**（進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - 埋めるファイル（穴の数）：`src/evla/planning/ik_so101.py`（7）、`src/evla/planning/randomize.py`（5）、`src/evla/planning/episode_plan.py`（1）、`src/evla/planning/build.py`（3）、`ros2_ws/src/evla_nodes/evla_nodes/demo_generator.py`（2）
+> - テスト：`pytest tests/planning`
+> - 「5. 実装手順」は、ゼロから書く場合の手順です。穴埋め版では、手順の中の**確認作業**（動作確認・測定・完了条件）を行い、コードは穴を埋めるだけで足ります。
+
 ## 1. 目的と計画書の対応
 
 - MoveIt 2で、ランダムな配置のキューブを箱に入れる軌道を自動生成する。

@@ -1,5 +1,10 @@
 # track2/37. ROS 2ポリシーノードとZeroMQ IPC
 
+> **穴埋め版**（進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - 埋めるファイル（穴の数）：`src/evla/ipc/protocol.py`（6）、`src/evla/ipc/client.py`（4）、`src/evla/ipc/server.py`（4）、`scripts/serve_policy.py`（1）、`ros2_ws/src/evla_nodes/evla_nodes/action_mapping.py`（3）、`ros2_ws/src/evla_nodes/evla_nodes/policy_node.py`（3）
+> - テスト：`pytest tests/ipc`
+> - 「5. 実装手順」は、ゼロから書く場合の手順です。穴埋め版では、手順の中の**確認作業**（動作確認・測定・完了条件）を行い、コードは穴を埋めるだけで足ります。
+
 ## 1. 目的と計画書の対応
 
 - ROS（システムPython）と推論（`.venv-bench`）を**別プロセス**に分け、ZeroMQでつなぐ。

@@ -1,5 +1,10 @@
 # track2/31. Gazeboシーン：world・物体・カメラ・TCP・衝突マスク・bridge
 
+> **穴埋め版**（進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - 埋めるファイル（穴の数）：`ros2_ws/src/evla_sim/CMakeLists.txt`（1）、`ros2_ws/src/evla_sim/config/bridge.yaml`（3）、`ros2_ws/src/evla_sim/config/controllers.yaml`（1）、`ros2_ws/src/evla_sim/urdf/so101_evla.urdf.xacro`（4）、`ros2_ws/src/evla_sim/worlds/evla_pickplace.sdf.jinja`（1）、`ros2_ws/src/evla_sim/scripts/render_world.py`（3）、`ros2_ws/src/evla_sim/launch/sim.launch.py`（3）
+> - テスト：なし（「9. 完了条件」で確認）
+> - 「5. 実装手順」は、ゼロから書く場合の手順です。穴埋め版では、手順の中の**確認作業**（動作確認・測定・完了条件）を行い、コードは穴を埋めるだけで足ります。
+
 ## 1. 目的と計画書の対応
 
 - SO-101のpick&place用のGazeboシーン（机、キューブ、箱、カメラ2台、TCPフレーム、DetachableJoint）を作り、ROSとつなぐ。

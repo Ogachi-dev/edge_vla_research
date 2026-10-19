@@ -1,0 +1,9 @@
+# モードA の設定例。scripts/bench_mode_a.py --config configs/bench/torch_cpu.yaml --set policy.n_threads=4
+policy:
+  runtime: torch
+  model: HuggingFaceVLA/smolvla_libero
+  precision: fp32
+  n_threads: 8
+fixed_obs: data/fixed_obs/libero_object_t0.npz
+n_warmup: 3
+n_measure: 50

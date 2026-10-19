@@ -1,5 +1,10 @@
 # track1/26. モードA：単体ベンチ（計時・統計・メモリ）
 
+> **穴埋め版**（進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - 埋めるファイル（穴の数）：`src/evla/bench/timing.py`（6）、`src/evla/bench/memory.py`（4）、`src/evla/bench/mode_a.py`（5）、`scripts/bench_mode_a.py`（1）
+> - テスト：`pytest tests/bench`
+> - 「5. 実装手順」は、ゼロから書く場合の手順です。穴埋め版では、手順の中の**確認作業**（動作確認・測定・完了条件）を行い、コードは穴を埋めるだけで足ります。
+
 ## 1. 目的と計画書の対応
 
 - 推論だけを繰り返して、**レイテンシの分布・起動時間・メモリ**を正しく測る基盤を作る。

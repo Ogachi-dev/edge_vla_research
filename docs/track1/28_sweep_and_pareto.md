@@ -1,5 +1,10 @@
 # track1/28. 掃引の設計・実行と、パレート図
 
+> **穴埋め版**（進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - 埋めるファイル（穴の数）：`src/evla/sweep/spec.py`（4）、`src/evla/sweep/runner.py`（3）、`src/evla/analysis/load.py`（1）、`src/evla/analysis/pareto.py`（2）、`src/evla/analysis/plots.py`（3）、`scripts/sweep.py`（1）、`scripts/make_report_tables.py`（1）
+> - テスト：`pytest tests/sweep tests/analysis/test_pareto.py`
+> - 「5. 実装手順」は、ゼロから書く場合の手順です。穴埋め版では、手順の中の**確認作業**（動作確認・測定・完了条件）を行い、コードは穴を埋めるだけで足ります。
+
 ## 1. 目的と計画書の対応
 
 - 掃引軸の組み合わせを**予算内に収まるよう段階的に**設計し、自動で回す仕組みを作る。

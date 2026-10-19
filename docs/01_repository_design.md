@@ -1,5 +1,10 @@
 # 01. リポジトリ設計：構成・プロセス分離・データ形式
 
+> **穴埋め版**（進め方は [03_fill_in_guide](03_fill_in_guide.md)）
+> - 埋めるファイル（穴の数）：`src/evla/common/run_id.py`（5）、`src/evla/common/config.py`（6）、`src/evla/common/sysinfo.py`（7）、`src/evla/common/cli.py`（1）
+> - テスト：`pytest tests/common/test_run_id.py tests/common/test_config.py tests/common/test_sysinfo.py`
+> - 「5. 実装手順」は、ゼロから書く場合の手順です。穴埋め版では、手順の中の**確認作業**（動作確認・測定・完了条件）を行い、コードは穴を埋めるだけで足ります。
+
 ## 1. 目的と計画書の対応
 
 - 実装を始める前に、**どこに何を置くか**、**どのプロセス・venvで何を動かすか**、**結果をどの形式で残すか**を決める。

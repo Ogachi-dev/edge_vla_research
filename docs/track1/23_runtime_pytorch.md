@@ -1,5 +1,10 @@
 # track1/23. PyTorch CPUベースライン（LeRobotのSmolVLA）
 
+> **穴埋め版**（進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - 埋めるファイル（穴の数）：`src/evla/policy/torch_policy.py`（7）
+> - テスト：なし（「9. 完了条件」で確認）
+> - 「5. 実装手順」は、ゼロから書く場合の手順です。穴埋め版では、手順の中の**確認作業**（動作確認・測定・完了条件）を行い、コードは穴を埋めるだけで足ります。
+
 ## 1. 目的と計画書の対応
 
 - LeRobotの `SmolVLAPolicy` を `Policy` 抽象（22章）の実装として包み、**全比較の基準（FP32）**にする。

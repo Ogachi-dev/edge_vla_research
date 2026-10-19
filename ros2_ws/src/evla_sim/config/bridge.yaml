@@ -1,0 +1,46 @@
+# ros_gz_bridge（docs/track2/31 4.3）。サービスは launch の引数で渡す
+- ros_topic_name: /clock
+  gz_topic_name: /clock
+  ros_type_name: rosgraph_msgs/msg/Clock
+  gz_type_name: gz.msgs.Clock
+  direction: GZ_TO_ROS
+- ros_topic_name: /camera/top/image
+  gz_topic_name: /camera/top/image
+  ros_type_name: sensor_msgs/msg/Image
+  gz_type_name: gz.msgs.Image
+  direction: GZ_TO_ROS
+- ros_topic_name: /camera/top/camera_info
+  gz_topic_name: /camera/top/camera_info
+  ros_type_name: sensor_msgs/msg/CameraInfo
+  gz_type_name: gz.msgs.CameraInfo
+  direction: GZ_TO_ROS
+- ros_topic_name: /camera/wrist/image
+  gz_topic_name: /camera/wrist/image
+  ros_type_name: sensor_msgs/msg/Image
+  gz_type_name: ___  # 【穴①】Gazebo 側の画像の型名
+  direction: GZ_TO_ROS
+- ros_topic_name: /camera/wrist/camera_info
+  gz_topic_name: /camera/wrist/camera_info
+  ros_type_name: sensor_msgs/msg/CameraInfo
+  gz_type_name: gz.msgs.CameraInfo
+  direction: GZ_TO_ROS
+- ros_topic_name: /grasp/attach
+  gz_topic_name: /grasp/attach
+  ros_type_name: std_msgs/msg/Empty
+  gz_type_name: gz.msgs.Empty
+  direction: ___  # 【穴②】ROS から Gazebo への向き
+- ros_topic_name: /grasp/detach
+  gz_topic_name: /grasp/detach
+  ros_type_name: std_msgs/msg/Empty
+  gz_type_name: gz.msgs.Empty
+  direction: ROS_TO_GZ
+- ros_topic_name: /grasp/state
+  gz_topic_name: /grasp/state
+  ros_type_name: std_msgs/msg/String
+  gz_type_name: ___  # 【穴③】Gazebo 側の文字列メッセージの型名（String ではない）
+  direction: GZ_TO_ROS
+- ros_topic_name: /model/cube/pose
+  gz_topic_name: /model/cube/pose
+  ros_type_name: tf2_msgs/msg/TFMessage
+  gz_type_name: gz.msgs.Pose_V
+  direction: GZ_TO_ROS

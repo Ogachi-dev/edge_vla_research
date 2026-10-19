@@ -1,5 +1,10 @@
 # track1/22. ランタイム共通のPolicy抽象と数値一致の検証
 
+> **穴埋め版**（進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - 埋めるファイル（穴の数）：`src/evla/policy/factory.py`（1）、`src/evla/policy/preprocess.py`（5）、`src/evla/policy/equivalence.py`（6）、`scripts/check_equivalence.py`（2）
+> - テスト：`pytest tests/policy`
+> - 「5. 実装手順」は、ゼロから書く場合の手順です。穴埋め版では、手順の中の**確認作業**（動作確認・測定・完了条件）を行い、コードは穴を埋めるだけで足ります。
+
 ## 1. 目的と計画書の対応
 
 - PyTorch・OpenVINO・vla.cppを**同じ呼び出し方で使える抽象クラス**を作る。ベンチ（26章）や閉ループ（27章）は、この抽象だけに依存させる。

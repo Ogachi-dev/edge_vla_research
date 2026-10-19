@@ -1,5 +1,10 @@
 # common/41. 図表・Jetsonへの外挿・外部推論との比較・報告書
 
+> **穴埋め版**（進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - 埋めるファイル（穴の数）：`src/evla/analysis/extrapolate.py`（2）、`scripts/netem/setup.sh`（2）
+> - テスト：`pytest tests/analysis/test_extrapolate_rtf.py`
+> - 「5. 実装手順」は、ゼロから書く場合の手順です。穴埋め版では、手順の中の**確認作業**（動作確認・測定・完了条件）を行い、コードは穴を埋めるだけで足ります。
+
 ## 1. 目的と計画書の対応
 
 - 成果物（図表と報告書）の形を先に決め、データから自動で生成できるようにする。

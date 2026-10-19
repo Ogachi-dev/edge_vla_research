@@ -322,3 +322,17 @@ qtcreator-*
 
 # Catkin custom files
 CATKIN_IGNORE
+
+# User
+# 上の Python テンプレートの env/（仮想環境）に docs/env/ が巻き込まれないようにする
+!docs/env/
+results/
+data/
+third_party/
+.venv*/
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+
+# 穴埋めの答え（docs/03_fill_in_guide.md）。自分の答えと混ざらないよう git では管理しない
+answers/

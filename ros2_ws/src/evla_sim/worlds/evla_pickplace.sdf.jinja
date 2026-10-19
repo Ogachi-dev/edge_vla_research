@@ -1,0 +1,86 @@
+<?xml version="1.0"?>
+<!-- scripts/render_world.py が scene.yaml と乱数シードから描き出す（docs/track2/31 Step 2） -->
+<sdf version="1.9">
+  <world name="{{ world_name }}">
+    <physics name="fixed_step" type="ignored">
+      <max_step_size>{{ physics.max_step_size }}</max_step_size>
+      <real_time_factor>{{ physics.real_time_factor }}</real_time_factor>
+    </physics>
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="___" name="gz::sim::systems::UserCommands"/>  <!-- 【穴①】set_pose などのサービスを提供する system のファイル名 -->
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
+    <light type="directional" name="sun">
+      <pose>0 0 3 0 0.3 0</pose>
+      <diffuse>{{ light }} {{ light }} {{ light }} 1</diffuse>
+      <direction>-0.3 0.2 -1</direction>
+      <cast_shadows>true</cast_shadows>
+    </light>
+
+    <model name="ground"><static>true</static>
+      <link name="link">
+        <collision name="c"><geometry><plane><normal>0 0 1</normal><size>4 4</size></plane></geometry></collision>
+        <visual name="v"><geometry><plane><normal>0 0 1</normal><size>4 4</size></plane></geometry>
+          <material><diffuse>{{ table_color }} 1</diffuse></material></visual>
+      </link>
+    </model>
+
+    <!-- 上方カメラ（world に固定） -->
+    <model name="top_camera"><static>true</static>
+      <pose>{{ top.pose }}</pose>
+      <link name="link">
+        <sensor name="top_camera" type="camera">
+          <update_rate>{{ top.rate_hz }}</update_rate>
+          <topic>/camera/top/image</topic>
+          <camera>
+            <camera_info_topic>/camera/top/camera_info</camera_info_topic>
+            <horizontal_fov>{{ top.hfov_rad }}</horizontal_fov>
+            <image><width>{{ top.width }}</width><height>{{ top.height }}</height><format>R8G8B8</format></image>
+            <clip><near>0.01</near><far>3.0</far></clip>
+          </camera>
+        </sensor>
+      </link>
+    </model>
+
+    <!-- キューブ：爪とは衝突しない（collide_bitmask 0x02、31章 4.4） -->
+    <model name="cube">
+      <pose>0.2 0 {{ cube.size_m / 2 }} 0 0 0</pose>
+      <link name="cube_link">
+        <inertial>
+          <mass>{{ cube.mass_kg }}</mass>
+          <inertia><ixx>{{ cube_inertia }}</ixx><iyy>{{ cube_inertia }}</iyy><izz>{{ cube_inertia }}</izz>
+            <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+        </inertial>
+        <collision name="c">
+          <geometry><box><size>{{ cube.size_m }} {{ cube.size_m }} {{ cube.size_m }}</size></box></geometry>
+          <surface><contact><collide_bitmask>0x02</collide_bitmask></contact></surface>
+        </collision>
+        <visual name="v">
+          <geometry><box><size>{{ cube.size_m }} {{ cube.size_m }} {{ cube.size_m }}</size></box></geometry>
+          <material><diffuse>{{ cube_color }} 1</diffuse></material>
+        </visual>
+      </link>
+      <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
+        <publish_link_pose>false</publish_link_pose>
+        <publish_model_pose>true</publish_model_pose>
+        <use_pose_vector_msg>true</use_pose_vector_msg>
+        <update_frequency>{{ top.rate_hz }}</update_frequency>
+      </plugin>
+    </model>
+
+    <!-- 箱：底板＋4枚の壁 -->
+    <model name="box"><static>true</static>
+      <pose>{{ box.default_xy_m[0] }} {{ box.default_xy_m[1] }} 0 0 0 0</pose>
+      <link name="link">
+{% for w in box_walls %}
+        <collision name="{{ w.name }}_c"><pose>{{ w.pose }}</pose><geometry><box><size>{{ w.size }}</size></box></geometry></collision>
+        <visual name="{{ w.name }}_v"><pose>{{ w.pose }}</pose><geometry><box><size>{{ w.size }}</size></box></geometry>
+          <material><diffuse>0.6 0.4 0.2 1</diffuse></material></visual>
+{% endfor %}
+      </link>
+    </model>
+  </world>
+</sdf>

@@ -1,0 +1,4 @@
+runtime: torch
+model: HuggingFaceVLA/smolvla_libero
+precision: fp32
+n_threads: 8

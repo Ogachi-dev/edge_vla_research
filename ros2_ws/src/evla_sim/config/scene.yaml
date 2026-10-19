@@ -1,0 +1,12 @@
+# シーンの寸法の唯一の正（docs/track2/31_gazebo_scene.md 4.1）。scripts/render_world.py が読む
+world_name: evla
+physics: {max_step_size: 0.0016666666666666668, real_time_factor: 1.0}   # 1/600秒（30章 4.4）
+cube: {size_m: 0.03, mass_kg: 0.02}            # TODO(you): グリッパの開き幅から決める（32章）
+box:  {inner_xy_m: [0.12, 0.12], wall_h_m: 0.05, wall_t_m: 0.005, default_xy_m: [0.2, 0.18]}
+cameras:
+  top: {pose_xyzrpy: [0.25, 0.0, 0.55, 0.0, 1.5708, 0.0], hfov_rad: 1.0, width: 640, height: 480, rate_hz: 30}
+appearance_ranges:
+  light_intensity: [0.6, 1.2]
+  cube_colors: [[1, 0, 0], [0, 0.6, 0], [0, 0, 1], [1, 0.8, 0]]
+  camera_jitter_m: 0.01
+  camera_jitter_rad: 0.03

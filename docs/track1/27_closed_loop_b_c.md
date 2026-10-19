@@ -1,5 +1,10 @@
 # track1/27. モードB・C：閉ループ評価（ロックステップ、リアルタイム、遅延注入、同期/非同期）
 
+> **穴埋め版**（進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - 埋めるファイル（穴の数）：`src/evla/sim/latency.py`（2）、`src/evla/sim/executor.py`（7）、`src/evla/sim/closed_loop.py`（2）、`src/evla/analysis/stats.py`（7）、`scripts/eval_closed_loop.py`（1）
+> - テスト：`pytest tests/sim tests/analysis/test_stats.py`
+> - 「5. 実装手順」は、ゼロから書く場合の手順です。穴埋め版では、手順の中の**確認作業**（動作確認・測定・完了条件）を行い、コードは穴を埋めるだけで足ります。
+
 ## 1. 目的と計画書の対応
 
 - LIBEROで成功率を測る閉ループ評価器を作る。

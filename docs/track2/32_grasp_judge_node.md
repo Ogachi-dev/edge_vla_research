@@ -1,5 +1,10 @@
 # track2/32. 把持判定：純粋関数のコアとROSノード、DetachableJoint連携
 
+> **穴埋め版**（進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - 埋めるファイル（穴の数）：`src/evla/grasp/geometry.py`（11）、`src/evla/grasp/judge.py`（11）、`src/evla/grasp/events.py`（3）、`ros2_ws/src/evla_nodes/evla_nodes/ros_utils.py`（2）、`ros2_ws/src/evla_nodes/evla_nodes/grasp_judge_node.py`（5）、`ros2_ws/src/evla_nodes/setup.py`（1）
+> - テスト：`pytest tests/grasp`
+> - 「5. 実装手順」は、ゼロから書く場合の手順です。穴埋め版では、手順の中の**確認作業**（動作確認・測定・完了条件）を行い、コードは穴を埋めるだけで足ります。
+
 ## 1. 目的と計画書の対応
 
 - 計画書の把持条件1〜4、解放条件、タスク成功条件を、**ROSに依存しない純粋関数**として実装し、pytestで境界値を検証する。

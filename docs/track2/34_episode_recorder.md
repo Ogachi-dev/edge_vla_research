@@ -1,5 +1,10 @@
 # track2/34. ロックステップ記録とLeRobotDataset v3への変換
 
+> **穴埋め版**（進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - 埋めるファイル（穴の数）：`src/evla/common/stamped_buffer.py`（3）、`src/evla/dataset/conventions.py`（6）、`src/evla/dataset/raw_episode.py`（6）、`src/evla/dataset/quality.py`（5）、`src/evla/dataset/to_lerobot.py`（4）、`ros2_ws/src/evla_nodes/evla_nodes/lockstep.py`（4）、`ros2_ws/src/evla_nodes/evla_nodes/sim_io.py`（3）、`ros2_ws/src/evla_nodes/evla_nodes/episode_runner.py`（5）
+> - テスト：`pytest tests/common/test_stamped_buffer.py tests/dataset`
+> - 「5. 実装手順」は、ゼロから書く場合の手順です。穴埋め版では、手順の中の**確認作業**（動作確認・測定・完了条件）を行い、コードは穴を埋めるだけで足ります。
+
 ## 1. 目的と計画書の対応
 
 - Gazeboを**ロックステップ**（pauseして1/30秒ずつstep）で進めながら、画像2枚・関節状態・指令を、同じsim時刻で揃えて記録する。

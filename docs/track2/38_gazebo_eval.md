@@ -1,5 +1,10 @@
 # track2/38. Gazebo閉ループ評価と、把持閾値の感度分析
 
+> **穴埋め版**（進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - 埋めるファイル（穴の数）：`ros2_ws/src/evla_nodes/evla_nodes/eval_runner.py`（2）、`src/evla/analysis/rejudge.py`（4）
+> - テスト：`pytest tests/analysis/test_rejudge.py`
+> - 「5. 実装手順」は、ゼロから書く場合の手順です。穴埋め版では、手順の中の**確認作業**（動作確認・測定・完了条件）を行い、コードは穴を埋めるだけで足ります。
+
 ## 1. 目的と計画書の対応
 
 - ファインチューニング済みSmolVLAを、トラック1で選んだ設定でGazebo上で動かし、成功率・把持精度・実効制御周期を測る。

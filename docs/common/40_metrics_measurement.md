@@ -1,5 +1,10 @@
 # common/40. 評価指標の取得方法と、測定条件の統一
 
+> **穴埋め版**（進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - 埋めるファイル（穴の数）：`src/evla/analysis/power.py`（4）、`src/evla/analysis/rtf.py`（2）、`scripts/attach_power.py`（1）、`scripts/clock_check.sh`（1）
+> - テスト：`pytest tests/analysis/test_power.py tests/analysis/test_extrapolate_rtf.py`
+> - 「5. 実装手順」は、ゼロから書く場合の手順です。穴埋め版では、手順の中の**確認作業**（動作確認・測定・完了条件）を行い、コードは穴を埋めるだけで足ります。
+
 ## 1. 目的と計画書の対応
 
 - 計画書の評価指標8つについて、**どこで・どう取るか**を決め、取得の仕組みを作る。

@@ -1,5 +1,10 @@
 # track1/24. OpenVINOランタイム（CPU / iGPU）とINT8
 
+> **穴埋め版**（進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
+> - 埋めるファイル（穴の数）：`src/evla/policy/ov_policy.py`（7）、`scripts/ov_download.py`（1）、`scripts/ov_inspect.py`（2）
+> - テスト：なし（「9. 完了条件」で確認）
+> - 「5. 実装手順」は、ゼロから書く場合の手順です。穴埋め版では、手順の中の**確認作業**（動作確認・測定・完了条件）を行い、コードは穴を埋めるだけで足ります。
+
 ## 1. 目的と計画書の対応
 
 - 公開済みのOpenVINO版SmolVLA（LIBERO学習済み）を `Policy` として包み、CPUとiGPU（Iris Xe）で動かす。
