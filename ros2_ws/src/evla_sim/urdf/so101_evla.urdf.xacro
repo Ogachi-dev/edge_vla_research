@@ -6,12 +6,12 @@
   <xacro:include filename="$(find lerobot_description)/urdf/so101_ros2_control.xacro"/>
   <!-- so101_gazebo.xacro は include しない（コントローラYAMLのパスを差し替えるため） -->
 
-  <!-- TCP：両爪先端の中間（閉じた状態）。値は 31章 Step 3 で求める -->
+  <!-- TCP：両爪先端の中間（閉じた状態）。値は 31章 Step 5 で求める -->
   <link name="tcp"/>
   <joint name="tcp_joint" type="fixed">
     <parent link="___"/>  <!-- 【穴①】爪の固定側が付いているリンク（lerobot_ws のリンク名） -->
     <child link="tcp"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>  <!-- TODO(you): 31章 Step 3 の結果 -->
+    <origin xyz="0 0 0" rpy="0 0 0"/>  <!-- TODO(you): 31章 Step 5 の結果 -->
   </joint>
 
   <!-- 手首カメラ -->
@@ -38,7 +38,7 @@
   </gazebo>
 
   <!-- 衝突マスク：爪とキューブだけ衝突しないようにする（31章 4.4）。
-       TODO(you): gripper / jaw の collision に collide_bitmask 0x01 が入るか確かめる（31章 Step 4）。
+       TODO(you): gripper / jaw の collision に collide_bitmask 0x01 が入るか確かめる（31章 Step 6）。
        入らなければ render_world.py 側で SDF を後処理する -->
 
   <gazebo>

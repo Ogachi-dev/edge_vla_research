@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OpenVINO IR の入出力（名前・形・型）と、演算の種類を表示する。docs/track1/24_runtime_openvino.md Step 1
+"""OpenVINO IR の入出力（名前・形・型）と、演算の種類を表示する。docs/track1/24_runtime_openvino.md Step 2
 
 例: python scripts/ov_inspect.py data/models/ov/smolvla-libero-fp16-ov/smolvla.xml
 """

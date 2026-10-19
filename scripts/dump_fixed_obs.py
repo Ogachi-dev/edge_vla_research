@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""固定観測セットを data/fixed_obs/*.npz に保存する。docs/track1/21_libero_setup.md Step 5
+"""固定観測セットを data/fixed_obs/*.npz に保存する。docs/track1/21_libero_setup.md Step 6
 
 --policy を渡すとその方策で動かしながら（実際の観測）、渡さなければランダム行動で集める。
 """

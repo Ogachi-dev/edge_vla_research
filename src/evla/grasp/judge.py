@@ -1,6 +1,6 @@
 """把持・解放・成功の判定と状態機械（ROS を知らない純粋なロジック）。docs/track2/32_grasp_judge_node.md 4
 
-TCP 座標系の軸の規約（31章 Step 3 で決めたものに合わせて直す）：
+TCP 座標系の軸の規約（31章 Step 5 で決めたものに合わせて直す）：
     x = 前後（forward）、y = 爪の開閉（open）、z = 接近（approach、爪の先端が向く方向）
 """
 

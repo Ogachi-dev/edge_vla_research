@@ -1,4 +1,4 @@
-"""Gazebo＋SO-101＋コントローラ＋bridge＋把持判定ノードを起動する。docs/track2/31 Step 1
+"""Gazebo＋SO-101＋コントローラ＋bridge＋把持判定ノードを起動する。docs/track2/31 Step 4
 
 例: ros2 launch evla_sim sim.launch.py world:=/tmp/evla_world_0.sdf
 起動時は world を動かしておき（コントローラの起動に時間の進行が要るため）、

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# vla-bench を公開ベンチと同じ手順（ウォームアップ3回＋計測20回）× 3プロセスで回す。docs/track1/25 Step 6
+# vla-bench を公開ベンチと同じ手順（ウォームアップ3回＋計測20回）× 3プロセスで回す。docs/track1/25 Step 5
 # 例: BUILD=build-sycl bash scripts/vlabench_reference.sh
 set -euo pipefail
 BUILD=${BUILD:-build}
