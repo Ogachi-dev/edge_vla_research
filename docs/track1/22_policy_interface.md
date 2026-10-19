@@ -120,7 +120,7 @@ grep -n "【穴" src/evla/policy/{factory,preprocess,equivalence}.py scripts/che
 pytest tests/policy -q          # まだ失敗する
 ```
 
-- [ ] 穴14個が表示され、テストが `NotImplementedError` で失敗する
+- [ ] 穴14個が表示され、テストが `NotImplementedError` で失敗する（穴を通らない2件、`test_shape_mismatch` と `test_select_views_order_and_missing` だけは最初から通る）
 
 ### Step 1：インタフェースを読む ― `base.py`（穴なし、20分）
 

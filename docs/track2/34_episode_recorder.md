@@ -139,7 +139,7 @@ grep -n "【穴" src/evla/common/stamped_buffer.py src/evla/dataset/*.py ros2_ws
 pytest tests/common/test_stamped_buffer.py tests/dataset -q     # まだ失敗する
 ```
 
-- [ ] 穴36個が表示され、テストが失敗する
+- [ ] 穴36個が表示され、テストが失敗する（穴を通らない1件、`test_wait_until` だけは最初から通る）
 
 ### Step 1：時刻つきバッファとロックステップ ― `stamped_buffer.py`（穴①〜③）と `lockstep.py`（穴①〜④）（2〜3時間）
 

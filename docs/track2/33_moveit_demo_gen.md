@@ -177,7 +177,7 @@ print(ik_top_down([1.0, 0.0, 0.0], 0.0, g))
 
 **確かめる**
 
-- [ ] 3つのテスト（`up` / `down` の往復を含む）が `PASSED`
+- [ ] 3つのテスト（`up` / `down` のパラメータ化を含めて4件）が `PASSED`
 - [ ] FK の出力が `[0.2, -0.05, 0.015, -1.5708, 0.3]`（φ = −π/2）。1m 先は `None`（届かない）
 
 **URDF の値に置き換える（`TODO(you)`）**：`so101_geometry.yaml` のリンク長・`sign`・`offset_rad`・関節の範囲を、URDF（xacro 展開後）の joint origin と limit から読み取って書きます。そのあと ROS 側で、**FK と TF が一致する**ことを確かめます。

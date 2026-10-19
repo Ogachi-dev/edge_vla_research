@@ -150,7 +150,7 @@ pytest tests/sim tests/analysis/test_stats.py -q        # まだ失敗する
 
 `tests/sim/fakes.py` を読み、`FakePolicy` の行動 `[推論番号+1, チャンク内の位置, 1.0]` と、`FakeEnv.tags()` が返す `(推論番号, 位置)`（hold は `None`）を理解しておきます。
 
-- [ ] 穴19個が表示され、テストが失敗する
+- [ ] 穴19個が表示され、テストが失敗する（穴を通らない2件、`test_constant_ignores_measured` と `test_make_latency` だけは最初から通る）
 - [ ] `FakeEnv.tags()` の戻り値の意味を説明できる
 
 ### Step 1：遅延モデル ― `latency.py`（穴①②、15分）
@@ -240,14 +240,14 @@ pytest tests/sim/test_executor.py -v
 pytest tests/analysis/test_stats.py -v
 python -c "
 from evla.analysis.stats import wilson_ci, required_n
-print([round(x, 2) for x in wilson_ci(35, 50)], required_n(0.9, 0.75), required_n(0.9, 0.8))
+print([round(float(x), 2) for x in wilson_ci(35, 50)], required_n(0.9, 0.75), required_n(0.9, 0.8))
 "
 ```
 
 **確かめる**
 
 - [ ] 5つのテストがすべて `PASSED`
-- [ ] `wilson_ci(35, 50)` が約 `[0.56, 0.81]`（6.2節の目安）。n=50 でも区間の幅が25ポイントもあることを実感する
+- [ ] `[0.56, 0.81] 100 199` と表示される。`wilson_ci(35, 50)` が6.2節の目安どおり。n=50 でも区間の幅が25ポイントもあることを実感する
 - [ ] `required_n` の2つの値を比べ、「10ポイントの差」と「15ポイントの差」で必要な試行数がどれだけ違うかをメモに残す
 
 ### Step 4：閉ループの評価 ― `closed_loop.py`（穴①②）と `scripts/eval_closed_loop.py`（穴①）（1時間）
