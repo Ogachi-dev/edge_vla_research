@@ -15,21 +15,19 @@ from typing import Any
 
 import yaml
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
-
 
 def parse_override(item: str) -> tuple[list[str], Any]:
     """'a.b=3' → (['a', 'b'], 3)。値は YAML として解釈する（3 → int、[1,2] → list、null → None）。"""
     key, sep, raw = item.partition("=")
     if not sep:
         raise ValueError(f"override は key=value 形式で書く: {item!r}")
-    return ___, ___  # 【穴①】ドットで分割したキーのリスト、YAMLとして解釈した値
+    return key.split("."), yaml.safe_load(raw)  # 【穴①】ドットで分割したキーのリスト、YAMLとして解釈した値
 
 
 def set_by_path(d: dict[str, Any], keys: list[str], value: Any) -> None:
     """d["a"]["b"] = value。途中の辞書がなければ作る。"""
     for k in keys[:-1]:
-        d = ___  # 【穴②】無ければ空の辞書を入れて、それを返す dict のメソッド
+        d = d.setdefault(k, {})  # 【穴②】無ければ空の辞書を入れて、それを返す dict のメソッド
     d[keys[-1]] = value
 
 
@@ -55,10 +53,10 @@ def _convert(tp: Any, value: Any, where: str) -> Any:
 def from_dict[T](cls: type[T], data: Mapping[str, Any], where: str = "") -> T:
     """辞書 → dataclass。未知のキーがあれば ValueError（タイポの早期検出）。"""
     hints = typing.get_type_hints(cls)
-    names = {f.name for f in ___}  # 【穴③】dataclass のフィールド一覧を返す関数
+    names = {f.name for f in dataclasses.fields(cls)}  # 【穴③】dataclass のフィールド一覧を返す関数
     unknown = set(data) - names
     if unknown:
-        raise ___(f"{cls.__name__}{where}: 未知のキー {sorted(unknown)}")  # 【穴④】送出する例外の型
+        raise ValueError(f"{cls.__name__}{where}: 未知のキー {sorted(unknown)}")  # 【穴④】送出する例外の型
     kwargs = {k: _convert(hints[k], v, f"{where}.{k}") for k, v in data.items()}
     return cls(**kwargs)
 
@@ -67,7 +65,7 @@ def load_config[T](path: Path, cls: type[T], overrides: list[str] | None = None)
     """YAMLを読み、`a.b=3` 形式のoverridesを適用して、dataclass cls に変換する。
     未知のキーがあれば ValueError（タイポの早期検出）。"""
     with open(path, encoding="utf-8") as f:
-        data = ___ or {}  # 【穴⑤】YAMLを読む（任意のPythonオブジェクトを作らない安全な方）
+        data = yaml.safe_load(f) or {}  # 【穴⑤】YAMLを読む（任意のPythonオブジェクトを作らない安全な方）
     for item in overrides or []:
         keys, value = parse_override(item)
         set_by_path(data, keys, value)
@@ -83,7 +81,7 @@ def to_plain(obj: Any) -> Any:
     if isinstance(obj, list | tuple):
         return [to_plain(v) for v in obj]
     if isinstance(obj, Path):
-        return ___  # 【穴⑥】Path を文字列に
+        return  str(obj) # 【穴⑥】Path を文字列に
     return obj
 
 
