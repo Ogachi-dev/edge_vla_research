@@ -16,14 +16,12 @@ from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
-
 
 def generate_launch_description() -> LaunchDescription:
     share = Path(get_package_share_directory("evla_sim"))
     world = LaunchConfiguration("world")
     robot_description = ParameterValue(Command(["xacro ", str(share / "urdf" / "so101_evla.urdf.xacro")]),
-                                       value_type=___)  # 【穴①】xacro の出力を YAML として解釈させず、文字列のまま渡す指定
+                                       value_type=str)  # 【穴①】xacro の出力を YAML として解釈させず、文字列のまま渡す指定
 
     gz = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(str(Path(get_package_share_directory("ros_gz_sim")) / "launch" / "gz_sim.launch.py")),
@@ -32,7 +30,7 @@ def generate_launch_description() -> LaunchDescription:
     rsp = Node(package="robot_state_publisher", executable="robot_state_publisher",
                parameters=[{"robot_description": robot_description, "use_sim_time": True}])
     spawn = Node(package="ros_gz_sim", executable="create",
-                 arguments=[___, "-name", "so101"])  # 【穴②】ロボットのモデルを、このトピックの URDF から読む指定
+                 arguments=["-topic", "robot_description", "-name", "so101"])  # 【穴②】ロボットのモデルを、このトピックの URDF から読む指定
     bridge = Node(
         package="ros_gz_bridge", executable="parameter_bridge",
         parameters=[{"config_file": str(share / "config" / "bridge.yaml"), "use_sim_time": True}],
@@ -44,7 +42,7 @@ def generate_launch_description() -> LaunchDescription:
     judge = Node(package="evla_nodes", executable="grasp_judge_node", name="grasp_judge",
                  parameters=[str(share / "config" / "grasp.yaml")])
     # ロボットが出現してからコントローラを起動する
-    after_spawn = RegisterEventHandler(___)  # 【穴③】spawn のプロセスが終わったら spawners を起動するイベント
+    after_spawn = RegisterEventHandler(OnProcessExit(target_action=spawn, on_exit=spawners))  # 【穴③】spawn のプロセスが終わったら spawners を起動するイベント
 
     return LaunchDescription([
         DeclareLaunchArgument("world", default_value="/tmp/evla_world_0.sdf"),

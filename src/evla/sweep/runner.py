@@ -9,7 +9,6 @@ import sys
 import time
 from pathlib import Path
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.sweep.spec import SweepItem, expand
 
 SCRIPTS = {"A": "scripts/bench_mode_a.py", "B": "scripts/eval_closed_loop.py"}
@@ -38,17 +37,17 @@ def run_sweep(spec_path: Path, resume: bool = True, dry_run: bool = False,
     log_path.parent.mkdir(parents=True, exist_ok=True)
     for rnd in range(spec.rounds):
         order = list(spec.items)
-        ___  # 【穴①】周の番号をシードにして順序を並べ替える（同じ周なら再開しても同じ順）
+        random.Random(rnd).shuffle(order)  # 【穴①】周の番号をシードにして順序を並べ替える（同じ周なら再開しても同じ順）
         for i, item in enumerate(order):
             marker = _done_marker(out_root, spec.name, item, rnd)
-            if ___:  # 【穴②】再開モードで、既に終わった印がある
+            if resume and marker.exists():  # 【穴②】再開モードで、既に終わった印がある
                 continue
             cmd = [sys.executable, SCRIPTS[spec.mode], "--config", str(spec.base), "--tag", f"{spec.name}_r{rnd}"]
             for k, v in item.overrides.items():
                 cmd += ["--set", f"{k}={json.dumps(v)}"]
             print(f"[round {rnd} {i + 1}/{len(order)}] {item.overrides}", flush=True)
             t0 = time.time()
-            proc = ___  # 【穴③】子プロセスを実行して終わるまで待ち、出力を文字列で受け取る
+            proc = subprocess.run(cmd, capture_output=True, text=True)  # 【穴③】子プロセスを実行して終わるまで待ち、出力を文字列で受け取る
             rec = {"round": rnd, "key": item.key, "overrides": item.overrides, "rc": proc.returncode,
                    "sec": time.time() - t0, "stderr_tail": proc.stderr[-2000:]}
             with open(log_path, "a") as f:

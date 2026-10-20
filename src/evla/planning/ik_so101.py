@@ -20,8 +20,6 @@ from typing import Literal
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
-
 JOINTS = ("shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll")
 
 
@@ -56,24 +54,24 @@ def ik_top_down(p_base_tcp: ArrayLike, yaw_rad: float, geo: So101Geometry,
     """真上からの把持姿勢の関節角[rad]（URDF の値、5関節）を返す。到達できなければ None。
     yaw は wrist_roll の可動範囲に入るよう 90° の倍数だけずらしてよい（立方体は 90° 対称）。"""
     x, y, z = np.asarray(p_base_tcp, dtype=np.float64)
-    psi = ___  # 【穴①】真上から見た目標の方位角（パンの角度）
+    psi = math.atan2(y, x)  # 【穴①】真上から見た目標の方位角（パンの角度）
     r = math.hypot(x, y)
     # 工具が真下を向くので、手首ピッチ軸は TCP の真上 L3 の位置にある
     rw = r - geo.shoulder_offset_m
-    zw = ___  # 【穴②】手首の高さ（TCPの L3 上）を、肩の高さ基準で
+    zw = z + geo.wrist_to_tcp_m - geo.base_height_m  # 【穴②】手首の高さ（TCPの L3 上）を、肩の高さ基準で
     L1, L2 = geo.upper_arm_m, geo.forearm_m
-    D = ___  # 【穴③】余弦定理から cos(θ2)
+    D = (rw**2 + zw**2 - L1**2 - L2**2) / (2 * L1 * L2)  # 【穴③】余弦定理から cos(θ2)
     if abs(D) > 1.0:
         return None  # 遠すぎる／近すぎる
     th2 = -math.acos(D) if elbow == "up" else math.acos(D)
-    th1 = math.atan2(zw, rw) - ___  # 【穴④】肩→手首の線と上腕のなす角
-    th3 = ___  # 【穴⑤】φ = θ1+θ2+θ3 = -90° になる手首の角度
+    th1 = math.atan2(zw, rw) - math.atan2(L2 * math.sin(th2), L1 + L2 * math.cos(th2))  # 【穴④】肩→手首の線と上腕のなす角
+    th3 = -math.pi / 2 - th1 - th2  # 【穴⑤】φ = θ1+θ2+θ3 = -90° になる手首の角度
 
     lower, upper = np.asarray(geo.lower_rad), np.asarray(geo.upper_rad)
     for k in range(4):  # roll を 90° ずつずらして、可動範囲に入るものを探す
-        roll = wrap_pi(___ + k * math.pi / 2)  # 【穴⑥】爪の向き = ψ + roll なので roll = yaw - ψ
+        roll = wrap_pi(yaw_rad - psi + k * math.pi / 2)  # 【穴⑥】爪の向き = ψ + roll なので roll = yaw - ψ
         q = _model_to_urdf(np.array([psi, th1, th2, th3, roll]), geo)
-        if ___:  # 【穴⑦】全関節が下限以上かつ上限以下
+        if np.all(q >= lower) and np.all(q <= upper):  # 【穴⑦】全関節が下限以上かつ上限以下
             return q
     return None
 

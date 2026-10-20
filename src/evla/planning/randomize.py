@@ -12,8 +12,6 @@ from typing import Any
 
 import numpy as np
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
-
 
 @dataclass(frozen=True)
 class SceneSample:
@@ -36,7 +34,7 @@ class TrajectoryParams:
 
 def _uniform(rng: np.random.Generator, lo_hi: Any) -> float:
     lo, hi = lo_hi
-    return float(___)  # 【穴①】[lo, hi) の一様乱数
+    return float(rng.uniform(lo, hi))  # 【穴①】[lo, hi) の一様乱数
 
 
 def sample_scene(rng: np.random.Generator, ranges: Mapping[str, Any], max_tries: int = 1000) -> SceneSample:
@@ -44,14 +42,14 @@ def sample_scene(rng: np.random.Generator, ranges: Mapping[str, Any], max_tries:
     for _ in range(max_tries):
         cube = (_uniform(rng, ranges["cube_xy_m"]["x"]), _uniform(rng, ranges["cube_xy_m"]["y"]))
         box = (_uniform(rng, ranges["box_xy_m"]["x"]), _uniform(rng, ranges["box_xy_m"]["y"]))
-        if ___ >= ranges["min_cube_box_dist_m"]:  # 【穴②】2点間のユークリッド距離（math モジュール）
+        if math.dist(cube, box) >= ranges["min_cube_box_dist_m"]:  # 【穴②】2点間のユークリッド距離（math モジュール）
             break
     else:
         raise RuntimeError("配置が見つからない。範囲と min_cube_box_dist_m を見直す")
     colors = ranges["cube_colors"]
-    color = tuple(float(c) for c in colors[int(___)])  # 【穴③】0〜len-1 の整数の乱数
+    color = tuple(float(c) for c in colors[int(rng.integers(len(colors)))])  # 【穴③】0〜len-1 の整数の乱数
     home = np.asarray(ranges["q_home_rad"], dtype=np.float64)
-    q_init = home + ___  # 【穴④】平均0・標準偏差 q_init_noise_rad の正規乱数を home と同じ形で
+    q_init = home + rng.normal(0.0, ranges["q_init_noise_rad"], size=home.shape)  # 【穴④】平均0・標準偏差 q_init_noise_rad の正規乱数を home と同じ形で
     return SceneSample(
         cube_xy_m=cube,
         cube_yaw_rad=math.radians(_uniform(rng, ranges["cube_yaw_deg"])),
@@ -63,7 +61,7 @@ def sample_scene(rng: np.random.Generator, ranges: Mapping[str, Any], max_tries:
 
 def sample_params(rng: np.random.Generator, ranges: Mapping[str, Any]) -> TrajectoryParams:
     offset = (0.0, 0.0, 0.0)
-    if ___:  # 【穴⑤】確率 perturb_prob で真になる条件
+    if rng.random() < ranges["perturb_prob"]:  # 【穴⑤】確率 perturb_prob で真になる条件
         mag = _uniform(rng, ranges["perturb_mag_m"])
         ang = rng.uniform(0, 2 * math.pi)
         offset = (mag * math.cos(ang), mag * math.sin(ang), 0.0)

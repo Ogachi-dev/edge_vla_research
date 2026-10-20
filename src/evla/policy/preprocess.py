@@ -5,7 +5,6 @@ from __future__ import annotations
 import numpy as np
 import numpy.typing as npt
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.sim.types import Observation
 
 
@@ -19,8 +18,8 @@ def select_views(obs: Observation, views: tuple[str, ...]) -> dict[str, npt.NDAr
 
 def hwc_uint8_to_chw_float(img: npt.NDArray[np.uint8]) -> npt.NDArray[np.float32]:
     """(H, W, 3) uint8 [0,255] → (3, H, W) float32 [0,1]"""
-    x = img.astype(np.float32) / ___  # 【穴①】[0,255] → [0,1]
-    return np.ascontiguousarray(___)  # 【穴②】HWC → CHW の軸の並べ替え
+    x = img.astype(np.float32) / 255.0  # 【穴①】[0,255] → [0,1]
+    return np.ascontiguousarray(x.transpose(2, 0, 1))  # 【穴②】HWC → CHW の軸の並べ替え
 
 
 def resize_with_pad(img_chw: npt.NDArray[np.float32], size: int) -> npt.NDArray[np.float32]:
@@ -31,9 +30,9 @@ def resize_with_pad(img_chw: npt.NDArray[np.float32], size: int) -> npt.NDArray[
     import torch.nn.functional as F  # noqa: N812
 
     c, h, w = img_chw.shape
-    ratio = ___  # 【穴③】縮小率（長辺が size になる）
+    ratio = max(h, w) / size  # 【穴③】縮小率（長辺が size になる）
     nh, nw = int(h / ratio), int(w / ratio)
     t = torch.from_numpy(img_chw)[None]
-    t = F.interpolate(t, size=___, mode="bilinear", align_corners=False)  # 【穴④】出力の (高さ, 幅)
-    t = F.pad(t, ___, value=0.0)  # 【穴⑤】(左, 右, 上, 下) の埋め幅。左と上を埋める
+    t = F.interpolate(t, size=(nh, nw), mode="bilinear", align_corners=False)  # 【穴④】出力の (高さ, 幅)
+    t = F.pad(t, (size - nw, 0, size - nh, 0), value=0.0)  # 【穴⑤】(左, 右, 上, 下) の埋め幅。左と上を埋める
     return t[0].numpy()

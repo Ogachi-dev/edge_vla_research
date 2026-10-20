@@ -1,7 +1,7 @@
 # lerobot_ws の controllers を上書きする（docs/track2/31 Step 1）。関節名は "1"〜"6"
 controller_manager:
   ros__parameters:
-    update_rate: ___  # 【穴①】制御周期[Hz]。物理（600Hz）の約数で、30Hz の倍数
+    update_rate: 300  # 【穴①】制御周期[Hz]。物理（600Hz）の約数で、30Hz の倍数
     use_sim_time: true
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster

@@ -19,7 +19,6 @@ from sensor_msgs.msg import Image, JointState
 from std_msgs.msg import String
 from trajectory_msgs.msg import JointTrajectory
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.dataset.conventions import joint_state_to_vector, rad_vector_to_lerobot
 from evla.ipc.client import InferenceClient, PredictReply
 
@@ -68,12 +67,12 @@ class PolicyNode(Node):
         return self.get_clock().now().nanoseconds / 1e9
 
     def queue_remaining(self, t: float) -> int:
-        return max(0, round(___))  # 【穴①】軌道の残り時間をステップ数に換算
+        return max(0, round((self.queue_end - t) * self.hz))  # 【穴①】軌道の残り時間をステップ数に換算
 
     def on_timer(self) -> None:
         t = self.now()
         # 1) 推論が終わっていれば、軌道にして送る
-        if self.inflight is not None and ___:  # 【穴②】別スレッドの推論が終わったか（Future のメソッド）
+        if self.inflight is not None and self.inflight.done():  # 【穴②】別スレッドの推論が終わったか（Future のメソッド）
             reply = self.inflight.result()
             self.inflight = None
             k = 0 if self.mode == "sync" else round((t - self.t_obs) * self.hz)  # 推論中に過ぎたステップ数
@@ -89,7 +88,7 @@ class PolicyNode(Node):
             images = {"top": self.img["top"], "wrist": self.img["wrist"]}
             state = self.state_deg.copy()
             self.t_obs = t
-            self.inflight = ___(self.client.predict, images, state, self.task, t)  # 【穴③】関数と引数を渡して別スレッドで実行させ、Future を受け取るメソッド
+            self.inflight = self.pool.submit(self.client.predict, images, state, self.task, t)  # 【穴③】関数と引数を渡して別スレッドで実行させ、Future を受け取るメソッド
 
     def _ready(self) -> bool:
         return "top" in self.img and "wrist" in self.img and self.state_deg is not None

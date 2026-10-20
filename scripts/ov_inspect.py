@@ -11,18 +11,16 @@ from collections import Counter
 
 import openvino as ov
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
-
 
 def main(xml: str) -> None:
-    model = ___  # 【穴①】IR（.xml/.bin）を読み込む（まだコンパイルしない）
+    model = ov.Core().read_model(xml)  # 【穴①】IR（.xml/.bin）を読み込む（まだコンパイルしない）
     print("== inputs")
     for p in model.inputs:
         print(f"  {p.get_any_name():40s} {p.get_partial_shape()}  {p.get_element_type()}")
     print("== outputs")
     for p in model.outputs:
         print(f"  {p.get_any_name():40s} {p.get_partial_shape()}  {p.get_element_type()}")
-    ops = ___(op.get_type_name() for op in model.get_ordered_ops())  # 【穴②】要素ごとの出現回数を数える collections のクラス
+    ops = Counter(op.get_type_name() for op in model.get_ordered_ops())  # 【穴②】要素ごとの出現回数を数える collections のクラス
     print("== ops (top 25)")
     for name, n in ops.most_common(25):
         print(f"  {name:30s} {n}")

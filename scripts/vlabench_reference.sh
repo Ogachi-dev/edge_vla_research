@@ -8,6 +8,6 @@ mkdir -p "$OUT"
 for i in 1 2 3; do
   "third_party/vla.cpp/$BUILD/vla-bench" -hf vrfai/smolvla-libero-gguf --images 2 --size 512 --markdown \
     | tee "$OUT/run$i.md"
-  sleep ___  # 【穴①】プロセス間の冷却時間[秒]
+  sleep 30  # 【穴①】プロセス間の冷却時間[秒]
 done
 echo "→ $OUT"

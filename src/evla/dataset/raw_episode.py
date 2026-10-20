@@ -20,8 +20,6 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
-
 ARRAY_KEYS = ("t_sim", "state_rad", "action_rad", "cube_pose_w")
 
 
@@ -38,12 +36,12 @@ class _ImageWriter:
         import cv2
 
         while True:
-            item = ___  # 【穴①】キューから1つ取り出す（空なら来るまで待つ）
+            item = self.q.get()  # 【穴①】キューから1つ取り出す（空なら来るまで待つ）
             if item is None:  # 終了の合図
                 break
             path, rgb = item
             try:
-                bgr = cv2.cvtColor(rgb, ___)  # 【穴②】OpenCV は BGR の順で保存するので、RGB から並べ替える指定
+                bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)  # 【穴②】OpenCV は BGR の順で保存するので、RGB から並べ替える指定
                 if not cv2.imwrite(str(path), bgr, [cv2.IMWRITE_PNG_COMPRESSION, 1]):
                     raise OSError(f"書き込み失敗: {path}")
             except BaseException as e:  # noqa: BLE001  エラーはメインスレッドで finish() のときに投げ直す
@@ -54,7 +52,7 @@ class _ImageWriter:
 
     def close(self) -> None:
         self.q.put(None)
-        ___  # 【穴③】スレッドが全部書き終わって終了するまで待つ
+        self.thread.join()  # 【穴③】スレッドが全部書き終わって終了するまで待つ
         if self.error is not None:
             raise self.error
 
@@ -75,7 +73,7 @@ class RawEpisodeWriter:
     def add_frame(self, t_sim: float, images: Mapping[str, NDArray[np.uint8]], state_rad: NDArray,
                   action_rad: NDArray, cube_pose_w: NDArray) -> None:
         for c in self.cameras:
-            self._img.put(self.dir / c / ___, images[c])  # 【穴④】6桁ゼロ埋めのファイル名（000123.png）
+            self._img.put(self.dir / c / f"{self.n:06d}.png", images[c])  # 【穴④】6桁ゼロ埋めのファイル名（000123.png）
         self.rows["t_sim"].append(np.float64(t_sim))
         self.rows["state_rad"].append(np.asarray(state_rad, np.float64))
         self.rows["action_rad"].append(np.asarray(action_rad, np.float64))
@@ -91,7 +89,7 @@ class RawEpisodeWriter:
         np.savez_compressed(self.dir / "arrays.npz", **{k: np.stack(v) for k, v in self.rows.items()})
         with open(self.dir / "events.jsonl", "w") as f:
             for e in self.events:
-                f.write(___)  # 【穴⑤】1行に1つのJSON（JSON Lines）
+                f.write(json.dumps(e, ensure_ascii=False) + "\n")  # 【穴⑤】1行に1つのJSON（JSON Lines）
         (self.dir / "meta.json").write_text(json.dumps({**meta, "n_frames": self.n}, indent=2, ensure_ascii=False))
 
 
@@ -128,4 +126,4 @@ def load_raw_episode(ep_dir: Path) -> RawEpisode:
 
 def list_complete_episodes(raw_root: Path) -> list[Path]:
     """meta.json があるエピソードだけを、名前順に返す（途中で落ちたものは除く）。"""
-    return sorted(p.parent for p in ___)  # 【穴⑥】ワイルドカードでファイルを探す Path のメソッド
+    return sorted(p.parent for p in raw_root.glob("ep_*/meta.json"))  # 【穴⑥】ワイルドカードでファイルを探す Path のメソッド

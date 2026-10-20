@@ -15,7 +15,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.common.config import load_config
 from evla.policy.base import PolicyConfig
 from evla.policy.equivalence import compare_chunks, make_fixed_noise
@@ -32,7 +31,7 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--fixed_obs", type=Path, required=True)
     p.add_argument("--ref", type=Path, required=True)
-    p.add_argument("--test", type=Path, nargs=___, required=True)  # 【穴①】1個以上の値をリストで受け取る指定
+    p.add_argument("--test", type=Path, nargs="+", required=True)  # 【穴①】1個以上の値をリストで受け取る指定
     p.add_argument("--n", type=int, default=10)
     p.add_argument("--noise_seed", type=int, default=0)
     p.add_argument("--out", type=Path, default=Path("reports/equivalence_libero.md"))
@@ -49,7 +48,7 @@ def main() -> None:
         rows.append({
             "config": path.stem,
             "max_abs": max(r.max_abs for r in reps),
-            "rmse_mean": float(___),  # 【穴②】観測ごとの rmse の平均
+            "rmse_mean": float(np.mean([r.rmse for r in reps])),  # 【穴②】観測ごとの rmse の平均
             "cosine_min": min(r.cosine for r in reps),
             "gripper_flips": sum(r.gripper_sign_flips for r in reps),
             "worst_dim": int(np.argmax(np.max([r.per_dim_max_abs for r in reps], axis=0))),

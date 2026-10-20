@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.policy.base import Policy, PolicyConfig
 
 
@@ -12,7 +11,7 @@ def make_policy(cfg: PolicyConfig) -> Policy:
     if cfg.runtime == "torch":
         from evla.policy.torch_policy import TorchSmolVLA
 
-        return ___  # 【穴①】設定を渡してインスタンスを作る
+        return TorchSmolVLA(cfg)  # 【穴①】設定を渡してインスタンスを作る
     if cfg.runtime == "ov":
         from evla.policy.ov_policy import OVSmolVLA
 

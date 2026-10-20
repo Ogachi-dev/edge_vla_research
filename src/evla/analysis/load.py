@@ -10,8 +10,6 @@ from typing import Any
 import pandas as pd
 import yaml
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
-
 
 def flatten(d: Mapping[str, Any], prefix: str = "") -> dict[str, Any]:
     """{"policy": {"runtime": "ov"}} → {"policy.runtime": "ov"}"""
@@ -19,7 +17,7 @@ def flatten(d: Mapping[str, Any], prefix: str = "") -> dict[str, Any]:
     for k, v in d.items():
         key = f"{prefix}{k}"
         if isinstance(v, Mapping):
-            out.update(___)  # 【穴①】入れ子の辞書を、キーに「親のキー.」を付けて再帰的に平坦化
+            out.update(flatten(v, prefix=key + "."))  # 【穴①】入れ子の辞書を、キーに「親のキー.」を付けて再帰的に平坦化
         else:
             out[key] = v
     return out

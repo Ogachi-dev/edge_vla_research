@@ -12,7 +12,6 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.sim.types import Observation, StepResult
 
 # LeRobot の TASK_SUITE_MAX_STEPS と同じ値。【要確認】lerobot/envs/libero.py
@@ -32,11 +31,11 @@ class LiberoConfig:
 def quat_xyzw_to_axis_angle(q: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
     """(4,) (x,y,z,w) → (3,) 軸角（単位ベクトル×角度）。角度0付近の特異点を安全に扱う。"""
     q = np.asarray(q, dtype=np.float64)
-    w = np.clip(___, -1.0, 1.0)  # 【穴①】(x,y,z,w) のうち w 成分
-    s = np.sqrt(max(0.0, ___))  # 【穴②】sin(θ/2)^2 = 1 - cos(θ/2)^2
-    if ___:  # 【穴③】回転がほぼ0（軸が定まらない）ときの条件
+    w = np.clip(q[3], -1.0, 1.0)  # 【穴①】(x,y,z,w) のうち w 成分
+    s = np.sqrt(max(0.0, 1.0 - w * w))  # 【穴②】sin(θ/2)^2 = 1 - cos(θ/2)^2
+    if s < 1e-8:  # 【穴③】回転がほぼ0（軸が定まらない）ときの条件
         return np.zeros(3)
-    angle = ___  # 【穴④】w = cos(θ/2) から θ を求める
+    angle = 2.0 * np.arccos(w)  # 【穴④】w = cos(θ/2) から θ を求める
     return q[:3] / s * angle
 
 
@@ -46,7 +45,7 @@ class LiberoTaskEnv:
         from libero.libero import benchmark  # .venv-bench にだけ入っている
 
         self.cfg = cfg
-        suite = ___[cfg.suite]()  # 【穴⑤】スイート名 → スイートのクラス の辞書を返す関数
+        suite = benchmark.get_benchmark_dict()[cfg.suite]()  # 【穴⑤】スイート名 → スイートのクラス の辞書を返す関数
         self._env = LiberoEnv(
             task_suite=suite,
             task_id=cfg.task_id,
@@ -73,9 +72,9 @@ class LiberoTaskEnv:
         images = {}
         for key in CAMERAS:
             img = raw["pixels"][key]  # 【要確認】キーの階層（"pixels" の下に "image"/"image2" があるか）
-            images[key] = np.ascontiguousarray(___)  # 【穴⑥】上下と左右を両方反転（＝180°回転）するスライス
+            images[key] = np.ascontiguousarray(img[::-1, ::-1])  # 【穴⑥】上下と左右を両方反転（＝180°回転）するスライス
         rs = raw["robot_state"]  # 【要確認】
-        state = ___([  # 【穴⑦】配列をつなげる関数
+        state = np.concatenate([  # 【穴⑦】配列をつなげる関数
             rs["eef"]["pos"],
             quat_xyzw_to_axis_angle(rs["eef"]["quat"]),
             rs["gripper"]["qpos"],
@@ -96,9 +95,9 @@ class LiberoTaskEnv:
         a = np.asarray(action, dtype=np.float32)
         if a.shape != (7,):
             raise ValueError(f"行動の形が違う: {a.shape}")
-        if np.any(___):  # 【穴⑧】範囲 [-1, 1] を（誤差を少し許して）超えた要素
+        if np.any(np.abs(a) > 1.0 + 1e-6):  # 【穴⑧】範囲 [-1, 1] を（誤差を少し許して）超えた要素
             raise ValueError(f"行動が範囲外: {a}")
-        raw, _reward, terminated, truncated, info = ___  # 【穴⑨】行動を1つ実行する gymnasium のメソッド（観測, 報酬, terminated, truncated, info の5つを返す）
+        raw, _reward, terminated, truncated, info = self._env.step(a)  # 【穴⑨】行動を1つ実行する gymnasium のメソッド（観測, 報酬, terminated, truncated, info の5つを返す）
         self._t += 1
         success = bool(info.get("is_success", False))
         done = success or terminated or truncated or self._t >= self.max_steps

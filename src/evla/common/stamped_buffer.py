@@ -10,8 +10,6 @@ import bisect
 import threading
 from collections.abc import Callable
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
-
 
 class StampedBuffer[T]:
     def __init__(self, maxlen: int = 128) -> None:
@@ -22,7 +20,7 @@ class StampedBuffer[T]:
 
     def add(self, stamp_ns: int, item: T) -> None:
         with self._lock:
-            i = ___  # 【穴①】ソート済みリストのどこに入れれば順序が保てるか（二分探索）
+            i = bisect.bisect_right(self._stamps, stamp_ns)  # 【穴①】ソート済みリストのどこに入れれば順序が保てるか（二分探索）
             self._stamps.insert(i, stamp_ns)
             self._items.insert(i, item)
             if len(self._stamps) > self.maxlen:
@@ -35,14 +33,14 @@ class StampedBuffer[T]:
                 return None
             i = bisect.bisect_left(self._stamps, t_ns)
             best = min((j for j in (i - 1, i) if 0 <= j < len(self._stamps)),
-                       key=lambda j: ___)  # 【穴②】目的の時刻との差の大きさ
+                       key=lambda j: abs(self._stamps[j] - t_ns))  # 【穴②】目的の時刻との差の大きさ
             return self._items[best] if abs(self._stamps[best] - t_ns) <= tol_ns else None
 
     def latest_at_or_before(self, t_ns: int) -> T | None:
         """stamp <= t の中で最新のもの（発行周期がフレームと揃わないトピック用）。"""
         with self._lock:
             i = bisect.bisect_right(self._stamps, t_ns)
-            return ___  # 【穴③】t 以下で一番後ろの要素（無ければ None）
+            return self._items[i - 1] if i > 0 else None  # 【穴③】t 以下で一番後ろの要素（無ければ None）
 
     def newest_stamp(self) -> int | None:
         with self._lock:

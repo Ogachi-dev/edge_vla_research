@@ -14,7 +14,7 @@ setup(
     zip_safe=True,
     entry_points={
         "console_scripts": [
-            "grasp_judge_node = ___",  # 【穴①】「モジュール:関数」の形（ros2 run evla_nodes grasp_judge_node で起動できるようにする）
+            "grasp_judge_node = evla_nodes.grasp_judge_node:main",  # 【穴①】「モジュール:関数」の形（ros2 run evla_nodes grasp_judge_node で起動できるようにする）
             "episode_runner = evla_nodes.episode_runner:main",
             "policy_node = evla_nodes.policy_node:main",
             "eval_runner = evla_nodes.eval_runner:main",

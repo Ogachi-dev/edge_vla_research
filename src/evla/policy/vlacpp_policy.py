@@ -14,7 +14,6 @@ import numpy as np
 import numpy.typing as npt
 import zmq
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.policy.base import ChunkResult, Policy, PolicyConfig
 from evla.policy.preprocess import hwc_uint8_to_chw_float, resize_with_pad, select_views
 from evla.sim.types import Observation
@@ -39,9 +38,9 @@ class VlaCppPolicy(Policy):
         )
         self._ids = itertools.count()
         self._ctx = zmq.Context.instance()
-        self._sock = self._ctx.socket(___)  # 【穴①】「送って、返事を待つ」側のソケットの種類
-        self._sock.setsockopt(___)  # 【穴②】close 時に未送信のメッセージを待たない設定
-        self._sock.setsockopt(___, int(cfg.extra.get("recv_timeout_ms", 600_000)))  # 【穴③】受信のタイムアウト[ms]
+        self._sock = self._ctx.socket(zmq.REQ)  # 【穴①】「送って、返事を待つ」側のソケットの種類
+        self._sock.setsockopt(zmq.LINGER, 0)  # 【穴②】close 時に未送信のメッセージを待たない設定
+        self._sock.setsockopt(zmq.RCVTIMEO, int(cfg.extra.get("recv_timeout_ms", 600_000)))  # 【穴③】受信のタイムアウト[ms]
         self._sock.setsockopt(zmq.REQ_RELAXED, 1)
         self._sock.setsockopt(zmq.REQ_CORRELATE, 1)
         self._sock.connect(cfg.server_addr)
@@ -65,21 +64,21 @@ class VlaCppPolicy(Policy):
         req = self.pb.PredictRequest(request_id=request_id)
         for img in select_views(obs, self.cfg.views).values():
             chw = resize_with_pad(hwc_uint8_to_chw_float(img), self.cfg.image_size)
-            hwc = np.ascontiguousarray(___, dtype=np.float32)  # 【穴④】CHW → HWC
+            hwc = np.ascontiguousarray(chw.transpose(1, 2, 0), dtype=np.float32)  # 【穴④】CHW → HWC
             req.images.add(
                 encoding=self.pb.Image.F32_RGB_01,
                 height=hwc.shape[0], width=hwc.shape[1],
-                data=___,  # 【穴⑤】配列の生のバイト列
+                data=hwc.tobytes(),  # 【穴⑤】配列の生のバイト列
             )
         tokens = self.tokenizer(
-            ___, padding=False, truncation=True, max_length=TOKENIZER_MAX_LEN  # 【穴⑥】末尾に改行を付けた指示文
+            obs.task + "\n", padding=False, truncation=True, max_length=TOKENIZER_MAX_LEN  # 【穴⑥】末尾に改行を付けた指示文
         )["input_ids"]
         req.lang_tokens.extend(int(t) for t in tokens)
         state = np.zeros(MAX_STATE_DIM, dtype=np.float32)
-        state[___] = obs.state  # 【穴⑦】先頭の実次元ぶんだけコピー（残りは0）
+        state[: obs.state.shape[0]] = obs.state  # 【穴⑦】先頭の実次元ぶんだけコピー（残りは0）
         req.state.extend(state.tolist())
         if noise is not None:
-            req.noise.extend(noise.astype(np.float32).___.tolist())  # 【穴⑧】(50, 32) → (1600,) に平坦化
+            req.noise.extend(noise.astype(np.float32).ravel().tolist())  # 【穴⑧】(50, 32) → (1600,) に平坦化
         return req.SerializeToString()
 
     def predict_chunk(self, obs: Observation, noise: npt.NDArray[np.float32] | None = None) -> ChunkResult:
@@ -92,10 +91,10 @@ class VlaCppPolicy(Policy):
         raw = self._sock.recv()  # タイムアウトなら zmq.Again
         t2 = time.perf_counter_ns()
         rep = self.pb.PredictResponse()
-        ___  # 【穴⑨】バイト列からメッセージを復元する protobuf のメソッド
+        rep.ParseFromString(raw)  # 【穴⑨】バイト列からメッセージを復元する protobuf のメソッド
         if rep.error:
             raise RuntimeError(f"vla-server error: {rep.error}")
-        full = np.asarray(rep.action_chunk, dtype=np.float32).reshape(___)  # 【穴⑩】応答に入っている (行, 列)
+        full = np.asarray(rep.action_chunk, dtype=np.float32).reshape(rep.chunk_size, rep.action_dim)  # 【穴⑩】応答に入っている (行, 列)
         dim = int(self.cfg.extra.get("action_dim", full.shape[1]))
         actions = full[:, :dim]  # 先頭の実次元（LIBEROなら7）
         self._chunk_size, self._action_dim = actions.shape
@@ -109,7 +108,7 @@ class VlaCppPolicy(Policy):
                 "total": rep.latency_ms_total, "inference": rep.latency_ms_inference,
                 "vision": rep.latency_ms_vision, "prefill": rep.latency_ms_prefill,
                 "denoise": rep.latency_ms_denoise,
-                "transport": ___,  # 【穴⑪】往復時間からサーバー内の時間を引いた残り
+                "transport": rtt - rep.latency_ms_total,  # 【穴⑪】往復時間からサーバー内の時間を引いた残り
             },
         )
 

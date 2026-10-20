@@ -12,8 +12,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
-
 
 @dataclass(frozen=True)
 class VlaServerConfig:
@@ -37,7 +35,7 @@ BACKEND_PATTERNS = {
 def detect_backend(banner: list[str]) -> str:
     text = "\n".join(banner)
     for name, pat in BACKEND_PATTERNS.items():
-        if ___:  # 【穴①】文字列のどこかに一致するか（re のメソッド）
+        if pat.search(text):  # 【穴①】文字列のどこかに一致するか（re のメソッド）
             return name
     return "CPU"
 
@@ -63,19 +61,19 @@ class VlaServerProcess:
             if log:
                 log.write(line)
                 log.flush()
-            if ___ in line:  # 【穴②】起動完了の行に含まれる語（"... bound to tcp://*:5555. ready."）
-                ___  # 【穴③】待っているスレッドに「準備完了」を知らせる（threading.Event のメソッド）
+            if "ready" in line:  # 【穴②】起動完了の行に含まれる語（"... bound to tcp://*:5555. ready."）
+                self._ready.set()  # 【穴③】待っているスレッドに「準備完了」を知らせる（threading.Event のメソッド）
         if log:
             log.close()
 
     def __enter__(self) -> VlaServerProcess:
         env = {**os.environ, **self.cfg.env}
         self._proc = subprocess.Popen(
-            self._cmd(), stdout=subprocess.PIPE, stderr=___, text=True, env=env  # 【穴④】標準エラーも標準出力にまとめる指定
+            self._cmd(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env  # 【穴④】標準エラーも標準出力にまとめる指定
         )
         atexit.register(self._terminate)  # 例外で抜けてもゾンビを残さない
         threading.Thread(target=self._reader, daemon=True).start()
-        if not ___:  # 【穴⑤】イベントを最大 ready_timeout_s 秒待つ（来なければ False）
+        if not self._ready.wait(timeout=self.cfg.ready_timeout_s):  # 【穴⑤】イベントを最大 ready_timeout_s 秒待つ（来なければ False）
             self._terminate()
             raise TimeoutError(f"vla-server が ready にならない。ログ末尾: {self._lines[-20:]}")
         if self.cfg.expect_backend is not None:
@@ -92,11 +90,11 @@ class VlaServerProcess:
         p = self._proc
         if p is None or p.poll() is not None:
             return
-        p.send_signal(___)  # 【穴⑥】まずは行儀よく終了を頼むシグナル
+        p.send_signal(signal.SIGTERM)  # 【穴⑥】まずは行儀よく終了を頼むシグナル
         try:
             p.wait(timeout=10)
         except subprocess.TimeoutExpired:
-            ___  # 【穴⑦】応じなければ強制終了（SIGKILL）
+            p.kill()  # 【穴⑦】応じなければ強制終了（SIGKILL）
             p.wait()
 
     @property

@@ -12,7 +12,6 @@ from typing import Any, Literal
 import numpy as np
 import pandas as pd
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.common.config import dump_config
 from evla.common.sysinfo import save_env
 from evla.policy.base import PolicyConfig
@@ -36,7 +35,7 @@ class ClosedLoopConfig:
 
 def episode_seed(seed: int, task_id: int, init_state: int) -> int:
     """(seed, task, init_state) から決まる乱数シード。Python の hash() は実行ごとに変わるので使わない。"""
-    return ___(f"{seed}-{task_id}-{init_state}".encode())  # 【穴①】バイト列から決定的な32bit整数を作る関数（zlib）
+    return zlib.crc32(f"{seed}-{task_id}-{init_state}".encode())  # 【穴①】バイト列から決定的な32bit整数を作る関数（zlib）
 
 
 def run_eval(cfg: ClosedLoopConfig, run_dir: Path) -> pd.DataFrame:
@@ -55,7 +54,7 @@ def run_eval(cfg: ClosedLoopConfig, run_dir: Path) -> pd.DataFrame:
                     obs = env.reset(init_state_index=ep, seed=s)
                     ex = make_executor(cfg.executor, policy, latency, rng)
                     t0 = time.perf_counter()
-                    success, tr = ___  # 【穴②】1エピソードを最後まで回す executor のメソッド
+                    success, tr = ex.run(env, obs, env.max_steps)  # 【穴②】1エピソードを最後まで回す executor のメソッド
                     rows.append({
                         "task_id": task_id, "init_state_index": ep, "success": success,
                         "steps": tr.steps, "n_inferences": tr.n_inferences, "hold_steps": tr.hold_steps,

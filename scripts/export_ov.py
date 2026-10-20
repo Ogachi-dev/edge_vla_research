@@ -14,8 +14,6 @@ import json
 from importlib import metadata
 from pathlib import Path
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
-
 
 def sha256_of(path: Path) -> str | None:
     if not path.exists():
@@ -23,7 +21,7 @@ def sha256_of(path: Path) -> str | None:
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for block in iter(lambda: f.read(1 << 20), b""):  # 1MB ずつ読む（大きなファイルを一度にメモリに載せない）
-            ___  # 【穴①】ハッシュに少しずつデータを足すメソッド
+            h.update(block)  # 【穴①】ハッシュに少しずつデータを足すメソッド
     return h.hexdigest()
 
 
@@ -32,10 +30,10 @@ def export_openvino(ckpt: str, out_dir: Path, int8_weights: bool) -> Path:
     from physicalai.inference import InferenceModel
     from physicalai.policies import SmolVLA
 
-    policy = SmolVLA(pretrained_name_or_path=___)  # 【穴②】HFのrepoかローカルのディレクトリを渡す引数
+    policy = SmolVLA(pretrained_name_or_path=ckpt)  # 【穴②】HFのrepoかローカルのディレクトリを渡す引数
     policy.eval()
     hooks = [compress_weights_openvino_int8_sym] if int8_weights else []
-    policy.export(str(out_dir), backend=___, post_export_hooks=hooks)  # 【穴③】書き出し先の形式
+    policy.export(str(out_dir), backend="openvino", post_export_hooks=hooks)  # 【穴③】書き出し先の形式
     m = InferenceModel(str(out_dir), backend="openvino", device="CPU")  # 読み込めることの確認
     print("exported:", sorted(p.name for p in out_dir.iterdir()))
     print("model:", m)

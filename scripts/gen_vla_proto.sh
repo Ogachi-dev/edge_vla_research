@@ -5,5 +5,5 @@ set -euo pipefail
 PROTO_DIR=third_party/vla.cpp/src/serving
 OUT=src/evla/policy/_proto
 # grpcio-tools に入っている protoc を使う（apt の protoc と protobuf ランタイムの版がずれる事故を避ける）
-python -m grpc_tools.protoc -I "$PROTO_DIR" ___="$OUT" "$PROTO_DIR/vla.proto"  # 【穴①】Python のコードを出力するオプション
+python -m grpc_tools.protoc -I "$PROTO_DIR" --python_out="$OUT" "$PROTO_DIR/vla.proto"  # 【穴①】Python のコードを出力するオプション
 echo "generated: $OUT/vla_pb2.py"

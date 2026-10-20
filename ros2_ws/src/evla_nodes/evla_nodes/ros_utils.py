@@ -6,12 +6,11 @@ import numpy as np
 from builtin_interfaces.msg import Time as TimeMsg
 from geometry_msgs.msg import Pose, Transform
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.grasp.geometry import pose_to_matrix
 
 
 def stamp_to_ns(stamp: TimeMsg) -> int:
-    return ___  # 【穴①】秒とナノ秒の2つのフィールドを、整数のナノ秒1つに
+    return stamp.sec * 1_000_000_000 + stamp.nanosec  # 【穴①】秒とナノ秒の2つのフィールドを、整数のナノ秒1つに
 
 
 def transform_to_matrix(t: Transform) -> np.ndarray:
@@ -28,6 +27,6 @@ def transform_to_pose7(t: Transform) -> np.ndarray:
 def make_pose(x: float, y: float, z: float, yaw: float) -> Pose:
     p = Pose()
     p.position.x, p.position.y, p.position.z = float(x), float(y), float(z)
-    p.orientation.z = float(___)  # 【穴②】z軸まわりの回転のクォータニオンの z 成分
+    p.orientation.z = float(np.sin(yaw / 2))  # 【穴②】z軸まわりの回転のクォータニオンの z 成分
     p.orientation.w = float(np.cos(yaw / 2))
     return p

@@ -7,7 +7,7 @@
       <real_time_factor>{{ physics.real_time_factor }}</real_time_factor>
     </physics>
     <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
-    <plugin filename="___" name="gz::sim::systems::UserCommands"/>  <!-- 【穴①】set_pose などのサービスを提供する system のファイル名 -->
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>  <!-- 【穴①】set_pose などのサービスを提供する system のファイル名 -->
     <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
     <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
       <render_engine>ogre2</render_engine>

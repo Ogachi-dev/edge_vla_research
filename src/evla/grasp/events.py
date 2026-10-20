@@ -8,8 +8,6 @@ from typing import Any
 
 import numpy as np
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
-
 EVENT_TYPES = ("grasp_candidate", "attach_sent", "attached", "detach_sent", "released", "success", "failure")
 
 
@@ -24,14 +22,14 @@ def _default(o: Any) -> Any:
     if dataclasses.is_dataclass(o) and not isinstance(o, type):
         return dataclasses.asdict(o)
     if isinstance(o, np.ndarray):
-        return ___  # 【穴①】ndarray を Python のリストに
+        return o.tolist()  # 【穴①】ndarray を Python のリストに
     if isinstance(o, np.generic):
         return o.item()  # np.float64 → float など
     raise TypeError(f"JSONにできない型: {type(o)}")
 
 
 def dumps(event: dict[str, Any]) -> str:
-    return json.dumps(event, default=___, ensure_ascii=False)  # 【穴②】知らない型に出会ったときに呼ぶ関数を指定する引数
+    return json.dumps(event, default=_default, ensure_ascii=False)  # 【穴②】知らない型に出会ったときに呼ぶ関数を指定する引数
 
 
 def classify_failure(events: list[dict[str, Any]]) -> str:
@@ -43,7 +41,7 @@ def classify_failure(events: list[dict[str, Any]]) -> str:
         return "no_attempt"
     if "attached" not in types:
         failed = [f for e in events if e["type"] == "grasp_candidate" for f in e["decision"]["failed"]]
-        most = ___ if failed else "?"  # 【穴③】最も多く出てきた条件の名前（出現回数が最大の要素）
+        most = max(set(failed), key=failed.count) if failed else "?"  # 【穴③】最も多く出てきた条件の名前（出現回数が最大の要素）
         return f"grasp_rejected:{most}"
     if "failure" in types:
         return "dropped_or_misplaced"

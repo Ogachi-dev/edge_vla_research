@@ -7,8 +7,6 @@ from pathlib import Path
 
 import pandas as pd
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
-
 
 @dataclass(frozen=True)
 class PowerSummary:
@@ -25,7 +23,7 @@ class PowerSummary:
 def find_col(df: pd.DataFrame, *keywords: str) -> str:
     """列名にすべてのキーワードを含む最初の列（HWiNFO の列名は版やCPUで揺れる）。"""
     for c in df.columns:
-        if ___:  # 【穴①】大文字小文字を無視して、全キーワードが列名に含まれる
+        if all(k.lower() in c.lower() for k in keywords):  # 【穴①】大文字小文字を無視して、全キーワードが列名に含まれる
             return c
     raise KeyError(f"列が見つからない: {keywords}")
 
@@ -38,7 +36,7 @@ def load_hwinfo_csv(path: Path, tz: str = "Asia/Tokyo") -> pd.DataFrame:
         df = pd.read_csv(path, encoding="cp1252")
     df = df[pd.to_numeric(df.iloc[:, 2], errors="coerce").notna()]  # 末尾の「列名の繰り返し」行などを捨てる
     ts = pd.to_datetime(df["Date"] + " " + df["Time"], format="%d.%m.%Y %H:%M:%S.%f")
-    df.index = ___  # 【穴②】ローカル時刻として解釈し、UTC に変換する
+    df.index = ts.dt.tz_localize(tz).dt.tz_convert("UTC")  # 【穴②】ローカル時刻として解釈し、UTC に変換する
     return df.apply(pd.to_numeric, errors="coerce")
 
 
@@ -50,14 +48,14 @@ def summarize_window(df: pd.DataFrame, t0_ns: int, t1_ns: int, idle_window_s: fl
                      latency_ms: float | None = None) -> PowerSummary:
     """[t0, t1] の区間を集計する。t0 の直前 idle_window_s 秒をアイドルの基準とする。"""
     pkg, temp, clk = find_col(df, "package", "power"), find_col(df, "package", "[°c]"), find_col(df, "clock", "effective")
-    w = df.loc[___]  # 【穴③】時刻の index で区間を切り出すスライス
+    w = df.loc[_ts(t0_ns):_ts(t1_ns)]  # 【穴③】時刻の index で区間を切り出すスライス
     idle = df.loc[_ts(t0_ns) - pd.Timedelta(seconds=idle_window_s):_ts(t0_ns)]
     if w.empty:
         raise ValueError("区間にログが無い（時計のずれ、タイムゾーンを確認）")
     p_idle = float(idle[pkg].mean())
     energy = None
     if latency_ms is not None:
-        energy = ___  # 【穴④】(平均電力 − アイドル電力) × 1推論の秒数 = J
+        energy = (float(w[pkg].mean()) - p_idle) * latency_ms / 1000  # 【穴④】(平均電力 − アイドル電力) × 1推論の秒数 = J
     throttled = bool((w[temp] >= 95).mean() > 0.1 or w[clk].min() < 0.7 * idle[clk].median())
     return PowerSummary(
         mean_package_w=float(w[pkg].mean()), p95_package_w=float(w[pkg].quantile(0.95)),
