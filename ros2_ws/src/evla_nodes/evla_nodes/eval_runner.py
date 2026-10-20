@@ -21,7 +21,6 @@ import yaml
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.common.run_id import make_run_dir, new_run_id
 from evla.dataset.conventions import rad_vector_to_lerobot
 from evla.grasp.events import classify_failure
@@ -64,7 +63,7 @@ class EvalRunner(Node):
         t0 = f.t_sim
         while f.t_sim - t0 < self.max_s:  # sim 時刻での上限
             state = rad_vector_to_lerobot(f.state_rad)
-            reply = ___  # 【穴①】今の観測で推論サーバーに問い合わせる（ロックステップなので world は止まったまま）
+            reply = self.client.predict(f.images, state, self.task, f.t_sim)  # 【穴①】今の観測で推論サーバーに問い合わせる（ロックステップなので world は止まったまま）
             n_infer += 1
             lat.append(reply.rtt_ms)
             arm, grip = chunk_to_trajectories(reply.actions[: self.n_exec], FPS)
@@ -90,7 +89,7 @@ class EvalRunner(Node):
             if any(e["type"] in ("success", "failure") for e in events):
                 break
         io.clock.pause()
-        rtf = ___  # 【穴②】sim 時刻の経過 ÷ 壁時計の経過
+        rtf = (io.clock.now_ns / 1e9 - t_sim0) / (time.monotonic() - t_wall0)  # 【穴②】sim 時刻の経過 ÷ 壁時計の経過
         return events + [{"type": "_stats", "rtf": rtf}]
 
     def run(self) -> None:

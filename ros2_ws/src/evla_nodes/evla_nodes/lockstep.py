@@ -19,7 +19,6 @@ from rclpy.qos import qos_profile_sensor_data
 from ros_gz_interfaces.srv import ControlWorld
 from rosgraph_msgs.msg import Clock
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.common.stamped_buffer import StampedBuffer, wait_until
 
 from .ros_utils import stamp_to_ns
@@ -35,7 +34,7 @@ class LockstepClock:
         if abs(ratio - round(ratio)) > 1e-9:
             raise ValueError(f"frame_dt / physics_dt = {ratio} が整数でない（30章 4.4）")
         self.node = node
-        self.steps_per_frame = ___  # 【穴①】1フレームあたりの物理ステップ数（整数に丸める）
+        self.steps_per_frame = int(round(ratio))  # 【穴①】1フレームあたりの物理ステップ数（整数に丸める）
         self.frame_dt_ns = int(round(frame_dt * 1e9))
         self._cb_srv = MutuallyExclusiveCallbackGroup()
         self._cb_sub = ReentrantCallbackGroup()  # 購読はサービスの応答待ちと同時に動けるようにする
@@ -58,7 +57,7 @@ class LockstepClock:
         buf: StampedBuffer[Any] = StampedBuffer()
         self.buffers[topic] = buf
         self.node.create_subscription(
-            msg_type, topic, lambda m: ___,  # 【穴②】受け取ったメッセージを、その stamp（ns）をキーにしてバッファに入れる
+            msg_type, topic, lambda m: buf.add(stamp_to_ns(stamp_of(m)), m),  # 【穴②】受け取ったメッセージを、その stamp（ns）をキーにしてバッファに入れる
             qos_profile_sensor_data, callback_group=self._cb_sub,
         )
 
@@ -66,7 +65,7 @@ class LockstepClock:
         req = ControlWorld.Request()
         for k, v in fields.items():
             setattr(req.world_control, k, v)
-        fut = ___  # 【穴③】応答を待たずに要求を送り、Future を返すメソッド
+        fut = self._cli.call_async(req)  # 【穴③】応答を待たずに要求を送り、Future を返すメソッド
         if not wait_until(fut.done, timeout_s=10.0):
             raise TimeoutError(f"ControlWorld {fields} の応答がない")
         if not fut.result().success:
@@ -78,7 +77,7 @@ class LockstepClock:
     def step_frame(self) -> float:
         """multi_step = frame_dt / physics_dt を要求し、新しい sim 時刻[s]を返す。"""
         target = self._clock_ns + self.frame_dt_ns
-        self._call(pause=True, multi_step=___)  # 【穴④】止めたまま、指定した物理ステップ数だけ進める指定
+        self._call(pause=True, multi_step=self.steps_per_frame)  # 【穴④】止めたまま、指定した物理ステップ数だけ進める指定
         if not wait_until(lambda: self._clock_ns >= target - TOL_NS, timeout_s=10.0):
             raise TimeoutError(f"/clock が {target} ns に達しない（今 {self._clock_ns}）")
         return self._clock_ns / 1e9

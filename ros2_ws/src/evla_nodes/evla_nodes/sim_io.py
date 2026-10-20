@@ -22,7 +22,6 @@ from std_srvs.srv import Trigger
 from tf2_msgs.msg import TFMessage
 from trajectory_msgs.msg import JointTrajectory
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.common.stamped_buffer import wait_until
 from evla.dataset.conventions import joint_state_to_vector
 from evla.planning.episode_plan import JointTrajectoryData
@@ -40,7 +39,7 @@ def image_to_numpy(msg: Image) -> np.ndarray:
     """sensor_msgs/Image（rgb8）→ (H, W, 3) uint8。cv_bridge を使わずに済ませる。"""
     if msg.encoding != "rgb8":
         raise ValueError(f"rgb8 を想定: {msg.encoding}")
-    a = np.frombuffer(msg.data, dtype=np.uint8).___  # 【穴①】1行のバイト数は step（幅×3 より大きい場合がある）
+    a = np.frombuffer(msg.data, dtype=np.uint8).reshape(msg.height, msg.step)  # 【穴①】1行のバイト数は step（幅×3 より大きい場合がある）
     return a[:, : msg.width * 3].reshape(msg.height, msg.width, 3).copy()
 
 
@@ -95,7 +94,7 @@ class SimIO:
     def set_pose(self, name: str, x: float, y: float, z: float, yaw: float) -> None:
         req = SetEntityPose.Request()
         req.entity.name = name
-        req.entity.type = ___  # 【穴②】「モデル」を表す Entity の定数
+        req.entity.type = Entity.MODEL  # 【穴②】「モデル」を表す Entity の定数
         req.pose = make_pose(x, y, z, yaw)
         if not self._call(self.cli_pose, req).success:
             raise RuntimeError(f"set_pose {name} に失敗")
@@ -129,7 +128,7 @@ class SimIO:
         arm: JointTrajectoryControllerState = m[T_ARM_STATE]
         grip: JointTrajectoryControllerState = m[T_GRIP_STATE]
         ref_names = list(arm.joint_names) + list(grip.joint_names)
-        ref_pos = list(___) + list(grip.reference.positions)  # 【穴③】コントローラが今追従しようとしている目標位置
+        ref_pos = list(arm.reference.positions) + list(grip.reference.positions)  # 【穴③】コントローラが今追従しようとしている目標位置
         return Frame(
             t_sim=t,
             images={"top": image_to_numpy(m[T_TOP]), "wrist": image_to_numpy(m[T_WRIST])},

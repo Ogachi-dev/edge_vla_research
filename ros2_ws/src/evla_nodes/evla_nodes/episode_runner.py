@@ -21,7 +21,6 @@ import yaml
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.dataset.raw_episode import RawEpisodeWriter
 from evla.grasp.events import classify_failure
 from evla.planning.build import PlanConfig, UnreachableError, build_plan, joint_interp
@@ -35,7 +34,7 @@ FPS = 30
 
 
 def frames_for(duration_s: float) -> int:
-    return ___  # 【穴①】その時間をカバーするのに必要なフレーム数（切り上げ）
+    return math.ceil(duration_s * FPS)  # 【穴①】その時間をカバーするのに必要なフレーム数（切り上げ）
 
 
 class EpisodeRunner(Node):
@@ -62,7 +61,7 @@ class EpisodeRunner(Node):
             self.plan_joint_move = joint_interp
 
     def make_plan(self, seed: int) -> EpisodePlan:
-        rng = ___  # 【穴②】エピソードごとのシードから乱数生成器を作る
+        rng = np.random.default_rng(seed)  # 【穴②】エピソードごとのシードから乱数生成器を作る
         scene = sample_scene(rng, self.ranges)
         params = sample_params(rng, self.ranges)
         return build_plan(seed, scene, params, self.geo, self.plan_cfg, self.plan_joint_move)
@@ -89,7 +88,7 @@ class EpisodeRunner(Node):
                 n = frames_for(seg.duration_s)
             for _ in range(n):
                 f = io.step_and_observe()
-                ___(f.t_sim, f.images, f.state_rad, f.action_rad, f.cube_pose_w)  # 【穴③】1フレームを生エピソードに書き足すメソッド
+                writer.add_frame(f.t_sim, f.images, f.state_rad, f.action_rad, f.cube_pose_w)  # 【穴③】1フレームを生エピソードに書き足すメソッド
                 events += io.take_events()
         # 成功判定の静止を待つ（記録は続ける）
         for _ in range(FPS * 3):
@@ -98,7 +97,7 @@ class EpisodeRunner(Node):
             f = io.step_and_observe()
             writer.add_frame(f.t_sim, f.images, f.state_rad, f.action_rad, f.cube_pose_w)
             events += io.take_events()
-        success = ___  # 【穴④】イベントの中に success が1つでもあれば成功
+        success = any(e["type"] == "success" for e in events)  # 【穴④】イベントの中に success が1つでもあれば成功
         reason = classify_failure(events)
         for e in events:
             writer.add_event(e)
@@ -128,7 +127,7 @@ class EpisodeRunner(Node):
 def main() -> None:
     rclpy.init()
     node = EpisodeRunner()
-    executor = ___  # 【穴⑤】コールバックを複数スレッドで処理する executor（サービス待ちの間も購読を受け取れる）
+    executor = MultiThreadedExecutor(num_threads=4)  # 【穴⑤】コールバックを複数スレッドで処理する executor（サービス待ちの間も購読を受け取れる）
     executor.add_node(node)
     spin_thread = threading.Thread(target=executor.spin, daemon=True)
     spin_thread.start()

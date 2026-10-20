@@ -13,13 +13,11 @@ import jinja2
 import numpy as np
 import yaml
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
-
 HERE = Path(__file__).resolve().parent.parent
 
 
 def cube_inertia(mass: float, size: float) -> float:
-    return ___  # 【穴①】一様な立方体の慣性モーメント m·s²/6
+    return mass * size**2 / 6  # 【穴①】一様な立方体の慣性モーメント m·s²/6
 
 
 def box_walls(inner_xy: list[float], wall_h: float, t: float) -> list[dict]:
@@ -29,7 +27,7 @@ def box_walls(inner_xy: list[float], wall_h: float, t: float) -> list[dict]:
         {"name": "bottom", "pose": f"0 0 {t / 2} 0 0 0", "size": f"{ox} {oy} {t}"},
         {"name": "wall_xp", "pose": f"{ix / 2 + t / 2} 0 {wall_h / 2} 0 0 0", "size": f"{t} {oy} {wall_h}"},
         {"name": "wall_xn", "pose": f"{-(ix / 2 + t / 2)} 0 {wall_h / 2} 0 0 0", "size": f"{t} {oy} {wall_h}"},
-        {"name": "wall_yp", "pose": f"0 {___} {wall_h / 2} 0 0 0", "size": f"{ox} {t} {wall_h}"},  # 【穴②】内寸の半分＋壁厚の半分（壁の中心の位置）
+        {"name": "wall_yp", "pose": f"0 {iy / 2 + t / 2} {wall_h / 2} 0 0 0", "size": f"{ox} {t} {wall_h}"},  # 【穴②】内寸の半分＋壁厚の半分（壁の中心の位置）
         {"name": "wall_yn", "pose": f"0 {-(iy / 2 + t / 2)} {wall_h / 2} 0 0 0", "size": f"{ox} {t} {wall_h}"},
     ]
 
@@ -43,7 +41,7 @@ def render(scene: dict, seed: int) -> str:
     pose[3:] += rng.uniform(-ap["camera_jitter_rad"], ap["camera_jitter_rad"], 3)
     top["pose"] = " ".join(f"{v:.5f}" for v in pose)
     color = ap["cube_colors"][int(rng.integers(len(ap["cube_colors"])))]
-    env = jinja2.Environment(loader=jinja2.FileSystemLoader(HERE / "worlds"), undefined=___)  # 【穴③】テンプレートに未定義の変数があればエラーにする設定（タイポの早期発見）
+    env = jinja2.Environment(loader=jinja2.FileSystemLoader(HERE / "worlds"), undefined=jinja2.StrictUndefined)  # 【穴③】テンプレートに未定義の変数があればエラーにする設定（タイポの早期発見）
     return env.get_template("evla_pickplace.sdf.jinja").render(
         **scene, top=top,
         light=round(float(rng.uniform(*ap["light_intensity"])), 3),

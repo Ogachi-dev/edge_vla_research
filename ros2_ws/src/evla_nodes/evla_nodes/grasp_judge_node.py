@@ -20,7 +20,6 @@ from std_srvs.srv import Trigger
 from tf2_msgs.msg import TFMessage
 from tf2_ros import Buffer, TransformListener
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.grasp.events import dumps
 from evla.grasp.geometry import OpeningTable
 from evla.grasp.judge import GraspStateMachine, GraspThresholds, SuccessCriteria, compute_geometry
@@ -63,13 +62,13 @@ class GraspJudgeNode(Node):
         self.gz_attached = False
 
         self.tf_buffer = Buffer()
-        self.tf_listener = ___  # 【穴①】/tf を購読して Buffer に貯めるオブジェクト
-        ___(JointState, "/joint_states", self.on_joint_states, 10)  # 【穴②】トピックを購読するメソッド（型, 名前, コールバック, QoS の深さ）
+        self.tf_listener = TransformListener(self.tf_buffer, self)  # 【穴①】/tf を購読して Buffer に貯めるオブジェクト
+        self.create_subscription(JointState, "/joint_states", self.on_joint_states, 10)  # 【穴②】トピックを購読するメソッド（型, 名前, コールバック, QoS の深さ）
         self.create_subscription(TFMessage, "/model/cube/pose", self.on_cube_pose, 10)
         self.create_subscription(String, "/grasp/state", self.on_grasp_state, 10)
         self.create_subscription(JointTrajectoryControllerState, "/gripper_controller/controller_state",
                                  self.on_gripper_state, 10)
-        self.pub_attach = ___(Empty, "/grasp/attach", 10)  # 【穴③】トピックに配信するためのオブジェクトを作るメソッド
+        self.pub_attach = self.create_publisher(Empty, "/grasp/attach", 10)  # 【穴③】トピックに配信するためのオブジェクトを作るメソッド
         self.pub_detach = self.create_publisher(Empty, "/grasp/detach", 10)
         self.pub_event = self.create_publisher(String, "/grasp/event", 10)
         self.create_service(Trigger, "~/reset", self.on_reset)
@@ -103,7 +102,7 @@ class GraspJudgeNode(Node):
         if self.q_gripper is None or self.T_w_cube is None or self.q_gripper_ref is None:
             return
         try:
-            tf = ___  # 【穴④】world から見た tcp の変換（Time() は「最新」の意味）
+            tf = self.tf_buffer.lookup_transform(self.world_frame, self.tcp_frame, Time())  # 【穴④】world から見た tcp の変換（Time() は「最新」の意味）
         except Exception as e:  # noqa: BLE001  起動直後は TF がまだ無い
             self.get_logger().warn(f"TF 待ち: {e}", throttle_duration_sec=5.0)
             return
@@ -128,7 +127,7 @@ def main() -> None:
     rclpy.init()
     node = GraspJudgeNode()
     try:
-        ___  # 【穴⑤】コールバックを処理し続ける（Ctrl+C まで戻らない）
+        rclpy.spin(node)  # 【穴⑤】コールバックを処理し続ける（Ctrl+C まで戻らない）
     except KeyboardInterrupt:
         pass
     finally:

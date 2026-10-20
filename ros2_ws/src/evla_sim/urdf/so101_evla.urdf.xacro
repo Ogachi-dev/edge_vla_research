@@ -9,7 +9,7 @@
   <!-- TCP：両爪先端の中間（閉じた状態）。値は 31章 Step 5 で求める -->
   <link name="tcp"/>
   <joint name="tcp_joint" type="fixed">
-    <parent link="___"/>  <!-- 【穴①】爪の固定側が付いているリンク（lerobot_ws のリンク名） -->
+    <parent link="gripper"/>  <!-- 【穴①】爪の固定側が付いているリンク（lerobot_ws のリンク名） -->
     <child link="tcp"/>
     <origin xyz="0 0 0" rpy="0 0 0"/>  <!-- TODO(you): 31章 Step 5 の結果 -->
   </joint>
@@ -22,11 +22,11 @@
     <origin xyz="0 0 0" rpy="0 0 0"/>  <!-- TODO(you): 実機の取り付け位置に近い値 -->
   </joint>
   <gazebo reference="wrist_camera_joint">
-    <preserveFixedJoint>___</preserveFixedJoint>  <!-- 【穴②】固定関節をまとめて消さずに残す（消えるとセンサの親リンクが変わる） -->
+    <preserveFixedJoint>true</preserveFixedJoint>  <!-- 【穴②】固定関節をまとめて消さずに残す（消えるとセンサの親リンクが変わる） -->
   </gazebo>
   <gazebo reference="wrist_camera_link">
     <sensor name="wrist_camera" type="camera">
-      <update_rate>___</update_rate>  <!-- 【穴③】画像の周期[Hz]（sim 時刻） -->
+      <update_rate>30</update_rate>  <!-- 【穴③】画像の周期[Hz]（sim 時刻） -->
       <topic>/camera/wrist/image</topic>
       <camera>
         <camera_info_topic>/camera/wrist/camera_info</camera_info_topic>
@@ -47,7 +47,7 @@
     </plugin>
     <plugin filename="gz-sim-detachable-joint-system" name="gz::sim::systems::DetachableJoint">
       <parent_link>gripper</parent_link>
-      <child_model>___</child_model>  <!-- 【穴④】world に置いたキューブのモデル名 -->
+      <child_model>cube</child_model>  <!-- 【穴④】world に置いたキューブのモデル名 -->
       <child_link>cube_link</child_link>
       <attach_topic>/grasp/attach</attach_topic>
       <detach_topic>/grasp/detach</detach_topic>

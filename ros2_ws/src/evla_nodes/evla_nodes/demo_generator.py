@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import numpy as np
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.planning.episode_plan import JointTrajectoryData
 
 ARM_GROUP = "arm"
@@ -22,7 +21,7 @@ class MoveItJointPlanner:
         config = (MoveItConfigsBuilder("so101", package_name="lerobot_moveit")  # 【要確認】robot 名と package
                   .to_moveit_configs().to_dict())
         self.moveit = MoveItPy(node_name=node_name, config_dict=config)
-        self.arm = ___  # 【穴①】計画グループ "arm" を操作するオブジェクトを得るメソッド
+        self.arm = self.moveit.get_planning_component(ARM_GROUP)  # 【穴①】計画グループ "arm" を操作するオブジェクトを得るメソッド
         self.model = self.moveit.get_robot_model()
         self._params_cls = PlanRequestParameters
 
@@ -36,7 +35,7 @@ class MoveItJointPlanner:
 
     def __call__(self, q0: np.ndarray, q1: np.ndarray, vel_scale: float) -> JointTrajectoryData:
         self.arm.set_start_state(robot_state=self._state(q0))
-        self.arm.set_goal_state(robot_state=___)  # 【穴②】目標を「関節角の状態」で与える（姿勢ではなく）
+        self.arm.set_goal_state(robot_state=self._state(q1))  # 【穴②】目標を「関節角の状態」で与える（姿勢ではなく）
         params = self._params_cls(self.moveit)
         params.max_velocity_scaling_factor = vel_scale
         params.max_acceleration_scaling_factor = vel_scale
