@@ -13,7 +13,6 @@ from pathlib import Path
 import imageio.v2 as imageio
 import numpy as np
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.sim.libero_env import LiberoConfig, LiberoTaskEnv
 
 
@@ -32,7 +31,7 @@ def main() -> None:
     frames = []
     t0 = time.perf_counter()
     for _ in range(a.steps):
-        action = ___.astype(np.float32)  # 【穴①】[-1, 1] の一様乱数を7個
+        action = rng.uniform(-1, 1, size=7).astype(np.float32)  # 【穴①】[-1, 1] の一様乱数を7個
         res = env.step(action)
         frames.append(env.render_frame())
         if res.done:
@@ -40,7 +39,7 @@ def main() -> None:
     dt = time.perf_counter() - t0
     print(f"{len(frames)} steps, {dt / len(frames) * 1000:.1f} ms/step（描画込み）")
     a.out.parent.mkdir(parents=True, exist_ok=True)
-    ___(a.out, frames, fps=20)  # 【穴②】画像のリストを動画ファイルに書く関数
+    imageio.mimsave(a.out, frames, fps=20)  # 【穴②】画像のリストを動画ファイルに書く関数
     env.close()
 
 

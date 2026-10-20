@@ -5,7 +5,7 @@ VLA=third_party/vla.cpp
 SRC=data/models/gguf/smolvla-libero.gguf
 for t in Q8_0 Q4_0; do
   lower=$(echo "$t" | tr 'A-Z' 'a-z')
-  python "$VLA/scripts/quantize_gguf.py" --in "$SRC" --out "data/models/gguf/smolvla-libero-${lower}.gguf" ___  # 【穴①】量子化の種類を指定する引数
+  python "$VLA/scripts/quantize_gguf.py" --in "$SRC" --out "data/models/gguf/smolvla-libero-${lower}.gguf" --type "$t"  # 【穴①】量子化の種類を指定する引数
   python "$VLA/scripts/quantize_gguf.py" --in "$SRC" --out "data/models/gguf/smolvla-libero-${lower}-vision.gguf" --type "$t" --vision
 done
 ls -la data/models/gguf/

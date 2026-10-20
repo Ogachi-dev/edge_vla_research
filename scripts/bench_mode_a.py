@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import os
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.common.cli import base_parser
 from evla.common.config import load_config, parse_override, set_by_path
 
@@ -18,7 +17,7 @@ def set_thread_env(n_threads: int | None) -> None:
     if n_threads is None:
         return
     for k in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "VLA_N_THREADS"):
-        ___[k] = str(n_threads)  # 【穴①】環境変数の辞書（os モジュール。値は文字列）
+        os.environ[k] = str(n_threads)  # 【穴①】環境変数の辞書（os モジュール。値は文字列）
 
 
 def main() -> None:

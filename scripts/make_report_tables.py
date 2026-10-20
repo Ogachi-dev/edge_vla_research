@@ -5,7 +5,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.analysis.load import load_runs
 
 REPORTS = Path("reports")
@@ -20,7 +19,7 @@ def benchmark_table() -> None:
             "result.summary.p50", "result.summary.p90", "result.peak_rss_mb"]
     t = (df[[c for c in cols if c in df.columns]]
          .groupby(["policy.runtime", "policy.precision", "policy.device", "policy.n_threads"], dropna=False)
-         .___()  # 【穴①】同じ設定の周ごとの値をまとめる（外れ値に強い代表値）
+         .median()  # 【穴①】同じ設定の周ごとの値をまとめる（外れ値に強い代表値）
          .reset_index()
          .sort_values("result.summary.p50"))
     REPORTS.mkdir(exist_ok=True)

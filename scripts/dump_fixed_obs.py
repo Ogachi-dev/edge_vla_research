@@ -11,7 +11,6 @@ from pathlib import Path
 
 import numpy as np
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.sim.fixed_obs import save_fixed_obs
 from evla.sim.libero_env import LiberoConfig, LiberoTaskEnv
 
@@ -37,7 +36,7 @@ def main() -> None:
     obs = env.reset(seed=0)
     saved, queue = [], []
     while len(saved) < a.n:
-        if ___:  # 【穴①】every ステップごとに1回
+        if obs.sim_step % a.every == 0:  # 【穴①】every ステップごとに1回
             saved.append(obs)
         if policy is not None:
             if not queue:

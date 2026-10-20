@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pandas as pd
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.analysis.power import load_hwinfo_csv, summarize_window
 
 
@@ -24,7 +23,7 @@ def main() -> None:
         s = pd.read_parquet(run / "samples.parquet")
         s = s[~s["is_warmup"]]
         t0 = int(s["t_start_ns"].min())
-        t1 = int(s["t_start_ns"].max() + ___)  # 【穴①】最後の推論の長さ（ms → ns）
+        t1 = int(s["t_start_ns"].max() + s["latency_ms"].iloc[-1] * 1e6)  # 【穴①】最後の推論の長さ（ms → ns）
         ps = summarize_window(df, t0, t1, latency_ms=float(s["latency_ms"].median()))
         summ_path = run / "summary.json"
         summ = json.loads(summ_path.read_text())

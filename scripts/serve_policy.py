@@ -10,7 +10,6 @@ import argparse
 import json
 from pathlib import Path
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.common.config import load_config
 from evla.ipc.server import InferenceServer
 from evla.policy.base import PolicyConfig
@@ -25,7 +24,7 @@ def main() -> None:
                    help='ROSのカメラ名 → Policy の視点名（JSON）。SO-101 のモデルなら {"top": "top", "wrist": "wrist"}')
     a = p.parse_args()
     policy = make_policy(load_config(a.config, PolicyConfig))
-    server = InferenceServer(policy, bind=a.bind, image_key_map=___)  # 【穴①】JSON の文字列を辞書にする
+    server = InferenceServer(policy, bind=a.bind, image_key_map=json.loads(a.image_key_map))  # 【穴①】JSON の文字列を辞書にする
     print(f"serving {a.config} on {a.bind}", flush=True)
     try:
         server.serve_forever()

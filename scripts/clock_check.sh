@@ -3,5 +3,5 @@
 set -euo pipefail
 wsl_ns=$(date +%s%N)
 win=$(powershell.exe -NoProfile -Command '[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()' | tr -d '\r')
-diff_ms=$(( ___ - win ))  # 【穴①】ns → ms
+diff_ms=$(( wsl_ns / 1000000 - win ))  # 【穴①】ns → ms
 echo "WSL - Windows = ${diff_ms} ms（powershell の起動時間ぶん、数百msは WSL が先になる）"
