@@ -13,7 +13,6 @@ from datetime import UTC, datetime
 from importlib import metadata
 from pathlib import Path
 
-
 PACKAGES = ("numpy", "torch", "openvino", "lerobot", "physicalai", "pyzmq", "nncf", "transformers")
 THREAD_ENV = ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "VLA_N_THREADS",
               "MUJOCO_GL", "GGML_OPENVINO_DEVICE")

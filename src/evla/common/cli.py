@@ -6,7 +6,6 @@ import argparse
 from pathlib import Path
 
 
-
 def base_parser(description: str) -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=description)
     p.add_argument("--config", type=Path, required=True, help="設定YAML")

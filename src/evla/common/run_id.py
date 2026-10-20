@@ -9,8 +9,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
-
 
 def config_hash(cfg: Mapping[str, Any], n: int = 6) -> str:
     """設定辞書から決定的なハッシュを作る（キー順に依存しない）。"""
