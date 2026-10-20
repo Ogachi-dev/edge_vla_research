@@ -18,7 +18,6 @@ from typing import Literal, Protocol
 import numpy as np
 import numpy.typing as npt
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.policy.base import ChunkResult, Policy
 from evla.sim.latency import LatencyModel
 from evla.sim.types import Observation, StepResult
@@ -77,7 +76,7 @@ class Executor(ABC):
             noise = self.rng.standard_normal((self._chunk_len(), self.cfg.noise_dim)).astype(np.float32)
         r = self.policy.predict_chunk(obs, noise)
         sim_ms = self.latency.sample(r.latency_ms, self.rng)
-        k = 0 if self.cfg.mode == "lockstep" else ___  # 【穴①】遅延の間に進むステップ数（切り上げ）
+        k = 0 if self.cfg.mode == "lockstep" else math.ceil(sim_ms / self.dt_ms)  # 【穴①】遅延の間に進むステップ数（切り上げ）
         trace.n_inferences += 1
         trace.latencies_ms.append(r.latency_ms)
         trace.sim_latencies_ms.append(sim_ms)
@@ -124,9 +123,9 @@ class SyncExecutor(Executor):
         try:
             while True:
                 r, k = self._infer(obs, trace.steps, trace)
-                for _ in ___:  # 【穴②】推論中の k ステップぶん
+                for _ in range(k):  # 【穴②】推論中の k ステップぶん
                     obs = self._step(env, self._hold(r.actions.shape[1]), trace, max_steps, hold=True)
-                for a in ___:  # 【穴③】チャンクの先頭 n_exec 個
+                for a in r.actions[: self.cfg.n_exec]:  # 【穴③】チャンクの先頭 n_exec 個
                     obs = self._step(env, a, trace, max_steps)
         except _EpisodeEnd as end:
             return end.success, trace
@@ -150,16 +149,16 @@ class AsyncExecutor(Executor):
 
             while True:
                 t = trace.steps
-                if pending is None and ___:  # 【穴④】次の推論を始める条件（キューの残り）
+                if pending is None and len(queue) <= cfg.async_threshold:  # 【穴④】次の推論を始める条件（キューの残り）
                     r, k = self._infer(obs, t, trace)
-                    pending = (___, r.actions, k)  # 【穴⑤】到着予定のステップ
+                    pending = (t + k, r.actions, k)  # 【穴⑤】到着予定のステップ
                 if pending is not None and t >= pending[0]:
                     _, chunk, k = pending
-                    queue = deque(___)  # 【穴⑥】古い先頭 k 個を飛ばした n_exec 個
+                    queue = deque(chunk[k : k + cfg.n_exec])  # 【穴⑥】古い先頭 k 個を飛ばした n_exec 個
                     trace.discarded_actions += min(k, len(chunk))
                     pending = None
                 if queue:
-                    obs = self._step(env, ___, trace, max_steps)  # 【穴⑦】キューの先頭を取り出す deque のメソッド
+                    obs = self._step(env, queue.popleft(), trace, max_steps)  # 【穴⑦】キューの先頭を取り出す deque のメソッド
                 else:
                     obs = self._step(env, self._hold(action_dim), trace, max_steps, hold=True)
         except _EpisodeEnd as end:

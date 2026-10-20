@@ -13,8 +13,6 @@ from pathlib import Path
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
-
 
 def quat_xyzw_to_matrix(q: ArrayLike) -> NDArray[np.float64]:
     x, y, z, w = np.asarray(q, dtype=np.float64) / np.linalg.norm(q)  # 正規化してから使う
@@ -27,8 +25,8 @@ def quat_xyzw_to_matrix(q: ArrayLike) -> NDArray[np.float64]:
 
 def pose_to_matrix(pos: ArrayLike, quat_xyzw: ArrayLike) -> NDArray[np.float64]:
     T = np.eye(4)
-    ___ = quat_xyzw_to_matrix(quat_xyzw)  # 【穴①】左上の 3x3（回転の部分）
-    ___ = np.asarray(pos, dtype=np.float64)  # 【穴②】右端の列の上3つ（並進の部分）
+    T[:3, :3] = quat_xyzw_to_matrix(quat_xyzw)  # 【穴①】左上の 3x3（回転の部分）
+    T[:3, 3] = np.asarray(pos, dtype=np.float64)  # 【穴②】右端の列の上3つ（並進の部分）
     return T
 
 
@@ -36,20 +34,20 @@ def invert(T: NDArray) -> NDArray:
     """同次変換の逆。回転は直交行列なので逆行列＝転置。np.linalg.inv より速く、数値的に安定。"""
     R, p = T[:3, :3], T[:3, 3]
     Ti = np.eye(4)
-    Ti[:3, :3] = ___  # 【穴③】回転の逆
-    Ti[:3, 3] = ___  # 【穴④】並進の逆（回転の逆を掛けて符号を反転）
+    Ti[:3, :3] = R.T  # 【穴③】回転の逆
+    Ti[:3, 3] = -R.T @ p  # 【穴④】並進の逆（回転の逆を掛けて符号を反転）
     return Ti
 
 
 def relative_pose(T_w_a: NDArray, T_w_b: NDArray) -> NDArray:
     """T_a_b = inv(T_w_a) @ T_w_b。"""
-    return ___  # 【穴⑤】docstring の式そのもの
+    return invert(T_w_a) @ T_w_b  # 【穴⑤】docstring の式そのもの
 
 
 def fold_deg(angle_deg: float, period: float = 90.0) -> float:
     """角度を [-period/2, period/2) に折り返す。立方体は 90° 回しても同じ形なので period=90。"""
     half = period / 2
-    return ___  # 【穴⑥】ずらして剰余をとって戻す
+    return (angle_deg + half) % period - half  # 【穴⑥】ずらして剰余をとって戻す
 
 
 def yaw_misalignment_deg(R_tcp_cube: NDArray, approach_axis: int = 2, open_axis: int = 1) -> float:
@@ -60,9 +58,9 @@ def yaw_misalignment_deg(R_tcp_cube: NDArray, approach_axis: int = 2, open_axis:
     """
     a = approach_axis
     e1, e2 = (a + 1) % 3, (a + 2) % 3          # x→(y,z), y→(z,x), z→(x,y)：巡回の順にとると右手系になる
-    j = int(np.argmin(___))  # 【穴⑦】キューブの各軸が接近軸方向に持つ成分の大きさ（最小＝最も水平な軸）
+    j = int(np.argmin(np.abs(R_tcp_cube[a, :])))  # 【穴⑦】キューブの各軸が接近軸方向に持つ成分の大きさ（最小＝最も水平な軸）
     v = R_tcp_cube[:, j]
-    ang_cube = math.degrees(___)  # 【穴⑧】平面上の角度（引数の順は y, x）
+    ang_cube = math.degrees(math.atan2(v[e2], v[e1]))  # 【穴⑧】平面上の角度（引数の順は y, x）
     o = np.zeros(3)
     o[open_axis] = 1.0
     ang_open = math.degrees(math.atan2(o[e2], o[e1]))
@@ -71,9 +69,9 @@ def yaw_misalignment_deg(R_tcp_cube: NDArray, approach_axis: int = 2, open_axis:
 
 def approach_angle_deg(R_w_tcp: NDArray, approach_axis: int = 2) -> float:
     """TCPの接近軸と、鉛直下向き(0,0,-1)のなす角[deg]。"""
-    v = ___  # 【穴⑨】接近軸を world で表したベクトル（回転行列の列）
+    v = R_w_tcp[:, approach_axis]  # 【穴⑨】接近軸を world で表したベクトル（回転行列の列）
     cos = float(np.dot(v, [0.0, 0.0, -1.0]))
-    return math.degrees(math.acos(___))  # 【穴⑩】丸め誤差で ±1 を超えると acos が NaN になるのを防ぐ
+    return math.degrees(math.acos(np.clip(cos, -1.0, 1.0)))  # 【穴⑩】丸め誤差で ±1 を超えると acos が NaN になるのを防ぐ
 
 
 @dataclass(frozen=True)
@@ -92,4 +90,4 @@ class OpeningTable:
 
 def jaw_opening_m(q_gripper_rad: float, table: OpeningTable) -> float:
     """グリッパ角から爪の開き幅を求める（表を線形補間）。"""
-    return float(___(q_gripper_rad, table.q_rad, table.opening_m))  # 【穴⑪】1次元の線形補間をする numpy の関数
+    return float(np.interp(q_gripper_rad, table.q_rad, table.opening_m))  # 【穴⑪】1次元の線形補間をする numpy の関数

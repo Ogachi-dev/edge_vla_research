@@ -14,7 +14,6 @@ from typing import Any
 import numpy as np
 import zmq
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.ipc.protocol import decode, encode
 
 
@@ -44,15 +43,15 @@ class InferenceClient:
         s.connect(self.addr)
         self._sock = s
         self._poller = zmq.Poller()
-        self._poller.register(s, ___)  # 【穴①】「受信できるデータが来たら」を監視する指定
+        self._poller.register(s, zmq.POLLIN)  # 【穴①】「受信できるデータが来たら」を監視する指定
 
     def _request(self, header: dict[str, Any], arrays: Mapping[str, np.ndarray]) -> tuple[dict, dict, float]:
         header = {**header, "id": next(self._ids)}
         for _attempt in range(self.retries + 1):
             assert self._sock is not None
             t0 = time.perf_counter_ns()
-            self._sock.___(encode(header, arrays), copy=False)  # 【穴②】複数フレームを1メッセージとして送るメソッド
-            if ___:  # 【穴③】最大 timeout_ms 待って、受信可能なソケットがあれば真
+            self._sock.send_multipart(encode(header, arrays), copy=False)  # 【穴②】複数フレームを1メッセージとして送るメソッド
+            if self._poller.poll(self.timeout_ms):  # 【穴③】最大 timeout_ms 待って、受信可能なソケットがあれば真
                 frames = self._sock.recv_multipart(copy=False)
                 rtt = (time.perf_counter_ns() - t0) / 1e6
                 head, arrs = decode(frames)
@@ -61,7 +60,7 @@ class InferenceClient:
                 if head.get("error"):
                     raise RuntimeError(f"server error: {head['error']}")
                 return head, arrs, rtt
-            ___  # 【穴④】返事が来ないのでソケットを作り直す（REQ は送受の順番が崩れると使えなくなる）
+            self._connect()  # 【穴④】返事が来ないのでソケットを作り直す（REQ は送受の順番が崩れると使えなくなる）
         raise TimeoutError(f"{self.addr} から {self.retries + 1} 回とも応答がない")
 
     def predict(self, images: Mapping[str, np.ndarray], state: np.ndarray, task: str,

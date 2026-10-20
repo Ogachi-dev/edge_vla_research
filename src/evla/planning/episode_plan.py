@@ -8,7 +8,6 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.planning.randomize import SceneSample, TrajectoryParams
 
 
@@ -67,7 +66,7 @@ class EpisodePlan:
     def duration_s(self) -> float:
         total = 0.0
         for s in self.segments:
-            total += s.trajectory.duration_s if ___ else s.duration_s  # 【穴①】腕の区間かどうか（腕だけ長さの持ち方が違う）
+            total += s.trajectory.duration_s if isinstance(s, ArmSegment) else s.duration_s  # 【穴①】腕の区間かどうか（腕だけ長さの持ち方が違う）
         return total
 
     def to_json_dict(self) -> dict[str, Any]:

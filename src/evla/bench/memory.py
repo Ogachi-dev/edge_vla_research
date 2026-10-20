@@ -6,15 +6,13 @@ import threading
 from collections.abc import Sequence
 from pathlib import Path
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
-
 
 def read_status_kb(pid: int, key: str) -> int | None:
     """/proc/<pid>/status の 'VmRSS:   12345 kB' のような行から kB の整数を読む。プロセスが無ければ None。"""
     try:
         for line in Path(f"/proc/{pid}/status").read_text().splitlines():
             if line.startswith(key + ":"):
-                return ___  # 【穴①】空白で区切った2番目の要素を整数に
+                return int(line.split()[1])  # 【穴①】空白で区切った2番目の要素を整数に
     except (FileNotFoundError, ProcessLookupError):
         return None
     return None
@@ -34,12 +32,12 @@ class PeakRssMonitor:
 
     def _sample(self) -> None:
         for pid in self.pids:
-            kb = read_status_kb(pid, ___)  # 【穴②】今の常駐メモリを表すキー
+            kb = read_status_kb(pid, "VmRSS")  # 【穴②】今の常駐メモリを表すキー
             if kb is not None:
-                self.peak_mb[pid] = ___  # 【穴③】これまでの最大と比べて大きい方（MB）
+                self.peak_mb[pid] = max(self.peak_mb[pid], kb / 1024)  # 【穴③】これまでの最大と比べて大きい方（MB）
 
     def _loop(self) -> None:
-        while not ___:  # 【穴④】interval_s 秒待つ。途中で止められたら True が返る
+        while not self._stop.wait(self.interval_s):  # 【穴④】interval_s 秒待つ。途中で止められたら True が返る
             self._sample()
 
     def __enter__(self) -> PeakRssMonitor:

@@ -11,7 +11,6 @@ from pathlib import Path
 
 import pandas as pd
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.bench.memory import PeakRssMonitor
 from evla.bench.timing import Stopwatch, summarize_latencies
 from evla.common.config import dump_config
@@ -64,7 +63,7 @@ def run_mode_a(cfg: ModeAConfig, run_dir: Path) -> RunResult:
         if cfg.policy.runtime == "vlacpp":
             if cfg.server is None:
                 raise ValueError("runtime=vlacpp には server の設定が必要")
-            server = ___(VlaServerProcess(cfg.server))  # 【穴①】with 文に入るのと同じことをして、抜けるときの後片付けを登録する ExitStack のメソッド
+            server = stack.enter_context(VlaServerProcess(cfg.server))  # 【穴①】with 文に入るのと同じことをして、抜けるときの後片付けを登録する ExitStack のメソッド
         pids = [os.getpid()] + ([server.pid] if server else [])
         mon = stack.enter_context(PeakRssMonitor(pids))
 
@@ -75,7 +74,7 @@ def run_mode_a(cfg: ModeAConfig, run_dir: Path) -> RunResult:
         n_total = cfg.n_warmup + cfg.n_measure
         first_ms = float("nan")
         for i in range(n_total):
-            k = ___ if cfg.obs_cycle else 0  # 【穴②】観測を順番に使い回す番号
+            k = i % len(obs_list) if cfg.obs_cycle else 0  # 【穴②】観測を順番に使い回す番号
             t_start_ns = time.time_ns()  # Windows側のログとの突き合わせ用（壁時計）
             vcpu = os.sched_getcpu()
             r = policy.predict_chunk(obs_list[k], noise)
@@ -83,7 +82,7 @@ def run_mode_a(cfg: ModeAConfig, run_dir: Path) -> RunResult:
                 first_ms = r.latency_ms
             row = {
                 "run_id": run_id,
-                "iter": ___,  # 【穴③】ウォームアップが負の番号、本番が0から
+                "iter": i - cfg.n_warmup,  # 【穴③】ウォームアップが負の番号、本番が0から
                 "is_warmup": i < cfg.n_warmup,
                 "obs_index": k,
                 "latency_ms": r.latency_ms,
@@ -95,8 +94,8 @@ def run_mode_a(cfg: ModeAConfig, run_dir: Path) -> RunResult:
         describe = policy.describe()
 
     df = pd.DataFrame(rows)
-    ___(run_dir / "samples.parquet", index=False)  # 【穴④】列指向の Parquet 形式で保存する DataFrame のメソッド
-    measured = df.loc[___, "latency_ms"]  # 【穴⑤】ウォームアップでない行（真偽の反転）
+    df.to_parquet(run_dir / "samples.parquet", index=False)  # 【穴④】列指向の Parquet 形式で保存する DataFrame のメソッド
+    measured = df.loc[~df["is_warmup"], "latency_ms"]  # 【穴⑤】ウォームアップでない行（真偽の反転）
     result = RunResult(
         run_dir=run_dir,
         load_s=sw_load.ms / 1000,

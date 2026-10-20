@@ -10,7 +10,6 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.dataset.conventions import LEROBOT_NAMES, URDF_TO_LEROBOT, rad_vector_to_lerobot
 from evla.dataset.raw_episode import list_complete_episodes, load_raw_episode
 
@@ -23,7 +22,7 @@ def build_features(image_hw: tuple[int, int] = (480, 640)) -> dict[str, dict]:
     feats: dict[str, dict] = {"observation.state": vec, "action": dict(vec)}
     for cam in CAMERAS:
         feats[f"observation.images.{cam}"] = {
-            "dtype": ___,  # 【穴①】画像を動画（mp4）として保存する dtype の名前
+            "dtype": "video",  # 【穴①】画像を動画（mp4）として保存する dtype の名前
             "shape": (*image_hw, 3),
             "names": ["height", "width", "channels"],
         }
@@ -36,7 +35,7 @@ def convert(raw_root: Path, out_root: Path, repo_id: str, task_text: str,
     追加メタデータを out_root/meta/evla/ に書く。変換の要約を返す。"""
     from lerobot.datasets.lerobot_dataset import LeRobotDataset  # 【要確認】import の場所
 
-    ds = ___(  # 【穴②】空のデータセットを新しく作るクラスメソッド
+    ds = LeRobotDataset.create(  # 【穴②】空のデータセットを新しく作るクラスメソッド
         repo_id=repo_id, fps=FPS, root=out_root, robot_type="so101_follower",
         features=build_features(), use_videos=True, image_writer_threads=image_writer_threads,
     )
@@ -55,8 +54,8 @@ def convert(raw_root: Path, out_root: Path, repo_id: str, task_text: str,
                 **{f"observation.images.{c}": ep.load_image(c, i) for c in CAMERAS},
                 "task": task_text,  # 【要確認】版によっては add_frame(frame, task=...) の形
             }
-            ___  # 【穴③】1フレーム追加するメソッド
-        ___  # 【穴④】ここまでのフレームを1エピソードとして確定するメソッド
+            ds.add_frame(frame)  # 【穴③】1フレーム追加するメソッド
+        ds.save_episode()  # 【穴④】ここまでのフレームを1エピソードとして確定するメソッド
         extra_rows.append({"source": ep_dir.name, **ep.meta})
     ds.finalize()  # 【要確認】v3 で必要な最後の書き出し（呼び忘れるとメタデータが欠ける）
 

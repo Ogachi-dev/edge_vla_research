@@ -10,7 +10,6 @@ from typing import Any
 import numpy as np
 import zmq
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.ipc.protocol import decode, encode
 from evla.policy.base import Policy
 from evla.sim.types import Observation
@@ -26,8 +25,8 @@ class InferenceServer:
         self.policy = policy
         self.image_key_map = dict(image_key_map or {"top": "image", "wrist": "image2"})
         self._ctx = zmq.Context.instance()
-        self._sock = self._ctx.socket(___)  # 【穴①】「受けて、返事を送る」側のソケットの種類
-        ___  # 【穴②】サーバー側はアドレスを「待ち受ける」（クライアント側は connect）
+        self._sock = self._ctx.socket(zmq.REP)  # 【穴①】「受けて、返事を送る」側のソケットの種類
+        self._sock.bind(bind)  # 【穴②】サーバー側はアドレスを「待ち受ける」（クライアント側は connect）
         self._running = True
 
     def _to_observation(self, head: dict[str, Any], arrays: dict[str, np.ndarray]) -> Observation:
@@ -35,7 +34,7 @@ class InferenceServer:
         for k, v in arrays.items():
             if k.startswith("image."):
                 cam = k.removeprefix("image.")
-                images[___] = v  # 【穴③】対応表にあれば変換、無ければそのままの名前
+                images[self.image_key_map.get(cam, cam)] = v  # 【穴③】対応表にあれば変換、無ければそのままの名前
         return Observation(images=images, state=arrays["state"], task=head["task"])
 
     def handle(self, head: dict[str, Any], arrays: dict[str, np.ndarray]) -> tuple[dict, dict]:
@@ -68,7 +67,7 @@ class InferenceServer:
                 traceback.print_exc()
                 rep_head, rep_arrays = {"type": "result", "id": None, "error": repr(e)}, {}
             rep_head["server_ms"] = (time.perf_counter_ns() - t0) / 1e6
-            self._sock.send_multipart(___, copy=False)  # 【穴④】返事のヘッダと配列をフレームのリストにする
+            self._sock.send_multipart(encode(rep_head, rep_arrays), copy=False)  # 【穴④】返事のヘッダと配列をフレームのリストにする
 
     def stop(self) -> None:
         self._running = False

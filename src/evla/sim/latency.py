@@ -9,8 +9,6 @@ from typing import Any, Protocol
 
 import numpy as np
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
-
 
 class LatencyModel(Protocol):
     def sample(self, measured_ms: float, rng: np.random.Generator) -> float:
@@ -26,7 +24,7 @@ class MeasuredLatency:
     add_ms: float = 0.0
 
     def sample(self, measured_ms: float, rng: np.random.Generator) -> float:
-        return ___  # 【穴①】実測値を scale 倍して add_ms を足す
+        return measured_ms * self.scale + self.add_ms  # 【穴①】実測値を scale 倍して add_ms を足す
 
 
 @dataclass(frozen=True)
@@ -46,7 +44,7 @@ class EmpiricalLatency:
     samples_ms: tuple[float, ...]
 
     def sample(self, measured_ms: float, rng: np.random.Generator) -> float:
-        return float(___)  # 【穴②】配列から1つ無作為に選ぶ Generator のメソッド
+        return float(rng.choice(self.samples_ms))  # 【穴②】配列から1つ無作為に選ぶ Generator のメソッド
 
     @classmethod
     def from_parquet(cls, path: Path) -> EmpiricalLatency:

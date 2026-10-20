@@ -12,7 +12,6 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.planning.episode_plan import (
     ArmSegment,
     EpisodePlan,
@@ -57,7 +56,7 @@ def joint_interp(q0: np.ndarray, q1: np.ndarray, vel_scale: float, max_vel_rad_s
     dist = float(np.max(np.abs(q1 - q0)))
     duration = max(dist / (max_vel_rad_s * vel_scale), 0.5)
     s = np.linspace(0.0, 1.0, n + 1)[1:]
-    s_smooth = ___  # 【穴①】始点と終点で速度0になる3次の補間（smoothstep）
+    s_smooth = 3 * s**2 - 2 * s**3  # 【穴①】始点と終点で速度0になる3次の補間（smoothstep）
     pts = q0[None, :] + s_smooth[:, None] * (q1 - q0)[None, :]
     return JointTrajectoryData(ARM_JOINTS, tuple(float(t) for t in s * duration),
                                tuple(tuple(float(v) for v in row) for row in pts))
@@ -68,7 +67,7 @@ def cartesian_line(name: str, p0: Sequence[float], p1: Sequence[float], yaw: flo
     """p0 → p1 を真上からの姿勢のまま直線で動く区間。(区間, 終点の関節角) を返す。"""
     p0, p1 = np.asarray(p0, float), np.asarray(p1, float)
     duration = max(float(np.linalg.norm(p1 - p0)) / speed_mps, 0.3)
-    qs = [ik_or_raise(___, yaw, geo) for k in range(1, n + 1)]  # 【穴②】直線を n 等分した k 番目の点
+    qs = [ik_or_raise(p0 + (p1 - p0) * k / n, yaw, geo) for k in range(1, n + 1)]  # 【穴②】直線を n 等分した k 番目の点
     times = tuple(duration * k / n for k in range(1, n + 1))
     traj = JointTrajectoryData(ARM_JOINTS, times, tuple(tuple(float(v) for v in q) for q in qs))
     return ArmSegment(name, traj), qs[-1]
@@ -95,7 +94,7 @@ def build_plan(seed: int, scene: SceneSample, params: TrajectoryParams, geo: So1
                                 yaw, geo, cfg.line_speed_mps / 2, cfg.line_points // 2)
         segs.append(seg)
         perturb.append({"type": "grasp_offset", "offset_m": [ox, oy, 0.0]})
-    segs.append(GripperSegment("close", ___, cfg.gripper_move_s))  # 【穴③】キューブ幅で止まる閉じ角
+    segs.append(GripperSegment("close", params.gripper_close_rad, cfg.gripper_move_s))  # 【穴③】キューブ幅で止まる閉じ角
     seg, q_lift = cartesian_line("lift", (cx, cy, cfg.grasp_z_m), (cx, cy, cfg.lift_z_m),
                                  yaw, geo, cfg.line_speed_mps, cfg.line_points)
     segs.append(seg)

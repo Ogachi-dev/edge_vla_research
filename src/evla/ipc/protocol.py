@@ -12,8 +12,6 @@ from typing import Any
 import msgpack
 import numpy as np
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
-
 PROTOCOL_VERSION = 1
 
 
@@ -22,17 +20,17 @@ def encode(header: dict[str, Any], arrays: Mapping[str, np.ndarray]) -> list[byt
     配列は C 連続にしてから memoryview で渡す（コピーを避ける）。"""
     metas, bufs = [], []
     for name, arr in arrays.items():
-        a = ___  # 【穴①】メモリ上で連続な配列にする（転置などで非連続だと、生のバイト列の並びが形と合わない）
-        metas.append({"name": name, "dtype": ___, "shape": list(a.shape)})  # 【穴②】エンディアンも含む型の文字列（'<f4' など）
+        a = np.ascontiguousarray(arr)  # 【穴①】メモリ上で連続な配列にする（転置などで非連続だと、生のバイト列の並びが形と合わない）
+        metas.append({"name": name, "dtype": a.dtype.str, "shape": list(a.shape)})  # 【穴②】エンディアンも含む型の文字列（'<f4' など）
         # 要素数0の配列は memoryview の cast ができないので空のバイト列にする
-        bufs.append(___.cast("B") if a.size else b"")  # 【穴③】コピーせずにバッファを参照するオブジェクト
+        bufs.append(memoryview(a).cast("B") if a.size else b"")  # 【穴③】コピーせずにバッファを参照するオブジェクト
     head = {**header, "v": PROTOCOL_VERSION, "arrays": metas}
-    return [___(head, use_bin_type=True), *bufs]  # 【穴④】辞書を msgpack のバイト列にする関数
+    return [msgpack.packb(head, use_bin_type=True), *bufs]  # 【穴④】辞書を msgpack のバイト列にする関数
 
 
 def decode(frames: Sequence[Any]) -> tuple[dict[str, Any], dict[str, np.ndarray]]:
     """np.frombuffer(...).reshape(shape)。v が違えば ValueError。"""
-    head = ___(_bytes(frames[0]), raw=False)  # 【穴⑤】msgpack のバイト列を辞書に戻す関数
+    head = msgpack.unpackb(_bytes(frames[0]), raw=False)  # 【穴⑤】msgpack のバイト列を辞書に戻す関数
     if head.get("v") != PROTOCOL_VERSION:
         raise ValueError(f"プロトコルの版が違う: {head.get('v')} != {PROTOCOL_VERSION}")
     metas = head.pop("arrays", [])
@@ -40,7 +38,7 @@ def decode(frames: Sequence[Any]) -> tuple[dict[str, Any], dict[str, np.ndarray]
         raise ValueError(f"配列の数が合わない: header {len(metas)}, frames {len(frames) - 1}")
     arrays = {}
     for meta, fr in zip(metas, frames[1:], strict=True):
-        arr = ___(_bytes(fr), dtype=np.dtype(meta["dtype"]))  # 【穴⑥】バイト列をコピーせずに配列として見る関数
+        arr = np.frombuffer(_bytes(fr), dtype=np.dtype(meta["dtype"]))  # 【穴⑥】バイト列をコピーせずに配列として見る関数
         arrays[meta["name"]] = arr.reshape(meta["shape"])
     return head, arrays
 

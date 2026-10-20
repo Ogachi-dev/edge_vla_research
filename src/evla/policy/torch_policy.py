@@ -13,7 +13,6 @@ import numpy as np
 import numpy.typing as npt
 import torch
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.policy.base import ChunkResult, Policy, PolicyConfig
 from evla.policy.preprocess import hwc_uint8_to_chw_float, select_views
 from evla.sim.types import Observation
@@ -32,11 +31,11 @@ class TorchSmolVLA(Policy):
 
         self.cfg = cfg
         if cfg.n_threads is not None:
-            ___(cfg.n_threads)  # 【穴①】intra-op のスレッド数を設定する torch の関数（モデルを読む前に呼ぶ）
+            torch.set_num_threads(cfg.n_threads)  # 【穴①】intra-op のスレッド数を設定する torch の関数（モデルを読む前に呼ぶ）
 
-        self.policy = ___(cfg.model)  # 【穴②】HFのrepo_idかパスからモデルを読むクラスメソッド
+        self.policy = SmolVLAPolicy.from_pretrained(cfg.model)  # 【穴②】HFのrepo_idかパスからモデルを読むクラスメソッド
         self.policy.config.num_steps = cfg.num_steps  # 【要確認】flow matching のステップ数の属性名
-        ___  # 【穴③】dropout などを推論モードにする nn.Module のメソッド
+        self.policy.eval()  # 【穴③】dropout などを推論モードにする nn.Module のメソッド
         self.policy.to("cpu")
         if cfg.precision == "bf16":
             self.policy.to(torch.bfloat16)
@@ -62,21 +61,21 @@ class TorchSmolVLA(Policy):
         batch: dict[str, Any] = {}
         for view, img in select_views(obs, self.cfg.views).items():
             chw = hwc_uint8_to_chw_float(img)
-            batch[f"observation.images.{view}"] = torch.from_numpy(chw).___  # 【穴④】先頭にバッチ次元を足す
+            batch[f"observation.images.{view}"] = torch.from_numpy(chw).unsqueeze(0)  # 【穴④】先頭にバッチ次元を足す
         batch["observation.state"] = torch.from_numpy(obs.state.astype(np.float32))[None]
         batch["task"] = obs.task  # 【要確認】文字列のままか、[obs.task] のリストか
         return batch
 
-    @___  # 【穴⑤】勾配を記録しない推論用のデコレータ（no_grad より軽い）
+    @torch.inference_mode()  # 【穴⑤】勾配を記録しない推論用のデコレータ（no_grad より軽い）
     def predict_chunk(self, obs: Observation, noise: npt.NDArray[np.float32] | None = None) -> ChunkResult:
         t0 = time.perf_counter_ns()
         batch = self.pre(self._to_batch(obs))
         t1 = time.perf_counter_ns()
         noise_t = None if noise is None else torch.from_numpy(noise)[None]  # (1, chunk, max_action_dim)
-        actions = self.policy.___(batch, noise=noise_t)  # 【穴⑥】チャンクを丸ごと返すメソッド（select_action は内部キューを使うので使わない）
+        actions = self.policy.predict_action_chunk(batch, noise=noise_t)  # 【穴⑥】チャンクを丸ごと返すメソッド（select_action は内部キューを使うので使わない）
         t2 = time.perf_counter_ns()
         actions = self.post(actions)  # 逆正規化
-        out = ___.float().cpu().numpy().astype(np.float32)  # 【穴⑦】バッチ次元を外す
+        out = actions[0].float().cpu().numpy().astype(np.float32)  # 【穴⑦】バッチ次元を外す
         t3 = time.perf_counter_ns()
         ms = lambda a, b: (b - a) / 1e6  # noqa: E731
         return ChunkResult(

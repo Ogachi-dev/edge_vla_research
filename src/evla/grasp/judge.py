@@ -13,7 +13,6 @@ from typing import Any, Literal
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
-from evla._blank import ___  # 穴埋め用。全部埋めたらこの行は消してよい
 from evla.grasp.events import make_event
 from evla.grasp.geometry import (
     OpeningTable,
@@ -56,7 +55,7 @@ class GraspDecision:
 
 def compute_geometry(T_w_tcp: NDArray, T_w_cube: NDArray, q_gripper_rad: float, close_commanded: bool,
                      opening_table: OpeningTable) -> GraspGeometry:
-    T_tcp_cube = ___  # 【穴①】TCP から見たキューブの姿勢
+    T_tcp_cube = relative_pose(T_w_tcp, T_w_cube)  # 【穴①】TCP から見たキューブの姿勢
     return GraspGeometry(
         offset_m=tuple(float(v) for v in T_tcp_cube[:3, 3]),
         yaw_err_deg=yaw_misalignment_deg(T_tcp_cube[:3, :3], APPROACH_AXIS, OPEN_AXIS),
@@ -69,7 +68,7 @@ def compute_geometry(T_w_tcp: NDArray, T_w_cube: NDArray, q_gripper_rad: float, 
 
 def open_axis_tol_m(g: GraspGeometry, th: GraspThresholds) -> float:
     """キューブが爪の間に収まるための、開閉方向のずれの許容値。"""
-    return ___  # 【穴②】開き幅からキューブ幅を引いた隙間の半分
+    return (g.opening_m - th.cube_size_m) / 2  # 【穴②】開き幅からキューブ幅を引いた隙間の半分
 
 
 def check_grasp(g: GraspGeometry, th: GraspThresholds) -> GraspDecision:
@@ -77,17 +76,17 @@ def check_grasp(g: GraspGeometry, th: GraspThresholds) -> GraspDecision:
     if not g.close_commanded:
         failed.append("not_closing")
     off = np.abs(g.offset_m)
-    if ___:  # 【穴③】開閉方向のずれが許容を超えた
+    if off[OPEN_AXIS] > open_axis_tol_m(g, th):  # 【穴③】開閉方向のずれが許容を超えた
         failed.append("open_axis")
     if off[APPROACH_AXIS] > th.vertical_tol_m:
         failed.append("vertical")
     if off[FORWARD_AXIS] > th.forward_tol_m:
         failed.append("forward")
-    if ___:  # 【穴④】ヨーのずれが許容を超えた
+    if abs(g.yaw_err_deg) > th.yaw_tol_deg:  # 【穴④】ヨーのずれが許容を超えた
         failed.append("yaw")
     if th.approach_tol_deg is not None and g.approach_deg > th.approach_tol_deg:
         failed.append("approach")
-    return GraspDecision(ok=___, failed=tuple(failed))  # 【穴⑤】失敗した条件が1つも無ければ True
+    return GraspDecision(ok=not failed, failed=tuple(failed))  # 【穴⑤】失敗した条件が1つも無ければ True
 
 
 def check_release(q_gripper_rad: float, th: GraspThresholds) -> bool:
@@ -107,8 +106,8 @@ class SuccessCriteria:
 def cube_in_box(p_w_cube: ArrayLike, sc: SuccessCriteria) -> bool:
     p = np.asarray(p_w_cube, dtype=np.float64)
     half = np.asarray(sc.box_inner_xy_m) / 2 - sc.margin_m
-    inside_xy = np.all(___)  # 【穴⑥】箱の中心からのxyのずれが、軸ごとに半幅以内
-    return bool(inside_xy and ___)  # 【穴⑦】縁より低い
+    inside_xy = np.all(np.abs(p[:2] - np.asarray(sc.box_center_xy_m)) <= half)  # 【穴⑥】箱の中心からのxyのずれが、軸ごとに半幅以内
+    return bool(inside_xy and p[2] < sc.rim_z_m)  # 【穴⑦】縁より低い
 
 
 class GraspState(Enum):
@@ -156,7 +155,7 @@ class GraspStateMachine:
         ev: list[dict[str, Any]] = []
         cmd: Literal["attach", "detach"] | None = None
         success: bool | None = None
-        rising = ___  # 【穴⑧】閉じ指令の「立ち上がり」（前回は閉じていなくて、今回閉じた）
+        rising = g.close_commanded and not self.m.prev_close  # 【穴⑧】閉じ指令の「立ち上がり」（前回は閉じていなくて、今回閉じた）
         self.m.prev_close = g.close_commanded
 
         if self.state is GraspState.FREE:
@@ -167,7 +166,7 @@ class GraspStateMachine:
                 if d.ok:
                     cmd = "attach"
                     self.m.attach_geometry = g
-                    self.state = ___  # 【穴⑨】attach を送ったあと、gz の返事を待つ状態
+                    self.state = GraspState.ATTACH_PENDING  # 【穴⑨】attach を送ったあと、gz の返事を待つ状態
                     ev.append(make_event("attach_sent", t_sim))
         elif self.state is GraspState.ATTACH_PENDING:
             if gz_attached:
@@ -179,13 +178,13 @@ class GraspStateMachine:
                 self.state = GraspState.DETACH_PENDING
                 ev.append(make_event("detach_sent", t_sim))
         elif self.state is GraspState.DETACH_PENDING:
-            if ___:  # 【穴⑩】gz が「外れた」と返してきた
+            if not gz_attached:  # 【穴⑩】gz が「外れた」と返してきた
                 self.state = GraspState.RELEASED
                 ev.append(make_event("released", t_sim, cube_pos=np.asarray(p_w_cube).tolist()))
         elif self.state is GraspState.RELEASED and not self.m.finished:
             p = np.asarray(p_w_cube, dtype=np.float64)
             moved = np.inf if self.m.prev_p is None else float(np.linalg.norm(p - self.m.prev_p))
-            self.m.still = ___  # 【穴⑪】動いていなければ数を1増やし、動いたら0に戻す
+            self.m.still = self.m.still + 1 if moved < self.sc.still_tol_m else 0  # 【穴⑪】動いていなければ数を1増やし、動いたら0に戻す
             self.m.prev_p = p
             if self.m.still >= self.sc.still_frames:
                 success = cube_in_box(p, self.sc)
