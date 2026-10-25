@@ -1,9 +1,9 @@
 [project]
 name = "evla"
 version = "0.1.0"
-requires-python = ">=3.12"
+requires-python = ">=3.10"  # bench側は3.12（uv）、ROS側（Humble）はシステムの3.10
 dependencies = [
-  "numpy",          # バージョンはvenv側で決まる（ROS側1.26 / bench側2.x の両方で動くコードにする）
+  "numpy",          # バージョンはvenv側で決まる（ROS側1.21 / bench側2.x の両方で動くコードにする）
   "pyyaml",
   "pyzmq",
   "msgpack",
@@ -23,6 +23,7 @@ build-backend = "hatchling.build"
 
 [tool.ruff]
 line-length = 100
+target-version = "py310"   # ROS側の3.10で動かないUP系の書き換え（datetime.UTC、PEP 695）を提案させない
 extend-exclude = ["answers", "third_party"]   # answers/ は穴埋めの答え（docs/03_fill_in_guide.md）
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "NPY"]
