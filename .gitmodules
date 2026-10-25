@@ -1,0 +1,4 @@
+[submodule "ros2_ws/src/lerobot_ws"]
+	path = ros2_ws/src/lerobot_ws
+	url = https://github.com/Ar-Ray-code/lerobot_ws.git
+	branch = sts_servo
