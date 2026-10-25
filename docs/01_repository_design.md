@@ -86,7 +86,7 @@ flowchart LR
 | `.venv-bench` | 3.12（uv） | `lerobot[smolvla,libero]`、`openvino`、`nncf`、`physicalai`、`pyzmq`、`protobuf`、`psutil`、`pandas`、`matplotlib` | トラック1全般、推論サーバー、データ変換 |
 | `.venv-export` | 3.12（uv） | `physicalai-train[nncf]`（`lerobot==0.6.0` を固定で要求） | 学習済みSmolVLAのOpenVINO IRへの書き出し |
 | vla.cpp | なし（C++） | libzmq、protobuf、（oneAPI / OpenVINO） | GGUF推論サーバー、`vla-bench` |
-| 学習機（RTX PRO 6000） | 3.12 | `lerobot[smolvla]`（CUDA版torch） | ファインチューニング |
+| 学習機（RTX PRO 6000、RAM 64GB のサーバー） | 3.12 | `lerobot[smolvla]`（CUDA版torch） | ファインチューニング |
 
 **依存の衝突は実在する**（調査で確認済み）。
 
