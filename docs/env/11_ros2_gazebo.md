@@ -23,7 +23,7 @@
 
 | パス | 役割 |
 | --- | --- |
-| `ros2_ws/src/lerobot_ws/` | 外部リポジトリ（clone のみ。変更しない） |
+| `ros2_ws/src/lerobot_ws/` | 外部リポジトリ（git submodule、ブランチ `sts_servo`、コミット固定。変更しない） |
 | `ros2_ws/src/evla_sim/` | 自作パッケージの骨組み（中身は [31](../track2/31_gazebo_scene.md) で作る） |
 | `scripts/ros_env.sh` | ROS環境を読み込むシェル（`source` 用） |
 | `docs/notes/env_setup.md` | インストールのログ、`glxinfo -B` の結果、RTF |
@@ -128,22 +128,24 @@ sed -i 's#<engine>ogre2</engine>#<engine>ogre</engine>#' ~/.ignition/gazebo/6/gu
 
 ### Step 3：lerobot_ws のビルド（1時間）
 
+lerobot_ws は git submodule として登録してある（`.gitmodules`、ブランチ `sts_servo`）。リポジトリを clone した直後は中身が空なので、submodule を取得してからビルドする。
+
 ```bash
-mkdir -p ros2_ws/src && cd ros2_ws/src
-git clone -b sts_servo https://github.com/Ar-Ray-code/lerobot_ws.git
-cd .. && rosdep update && rosdep install --from-paths src --ignore-src -r -y
+git submodule update --init ros2_ws/src/lerobot_ws   # 登録したコミットを取得する
+source scripts/ros_env.sh                           # venv を止め、Humble を読む
+cd ros2_ws && rosdep update && rosdep install --from-paths src --ignore-src -r -y
 colcon build --symlink-install
 ```
 
 - lerobot_ws は Jazzy＋Harmonic 向けです。Humble でビルドや起動に失敗したら、エラーと直し方をメモに残す。直すときは lerobot_ws を書き換えず、`evla_sim` 側のオーバーレイ（xacro の include、launch の引数）で吸収する（[01](../01_repository_design.md) 6節）。
 - `lerobot_ws` はリポジトリ全体が colcon ワークスペースです。`ros2_ws/src/lerobot_ws/src/*` の下にパッケージがありますが、colcon はサブディレクトリまで探索するので、このままでビルドできます。
-- **ルート側の `.gitignore` に `ros2_ws/src/lerobot_ws/` を追加する**か、git submodule として固定する（**【判断】** submoduleを推奨。コミットハッシュを固定でき、再現性が保てる）。
+- **【判断】** lerobot_ws は git submodule にした（`.gitignore` に入れる案より、コミットを固定できて再現しやすい）。上流を新しいコミットに上げるときは、`git -C ros2_ws/src/lerobot_ws pull` → 動作確認 → 親リポジトリで `git add ros2_ws/src/lerobot_ws` をコミットする。上げた理由はメモに残す。
 
 **確かめる**
 
 - [ ] `colcon build` が `Summary: N packages finished` で終わり、失敗がない
 - [ ] `source scripts/ros_env.sh && ros2 pkg list | grep lerobot` で lerobot_ws のパッケージが見える
-- [ ] lerobot_ws のコミット（`git -C ros2_ws/src/lerobot_ws rev-parse HEAD`）をメモに残した
+- [ ] `git submodule status` の lerobot_ws のコミットが、メモに残した値（`git -C ros2_ws/src/lerobot_ws rev-parse HEAD`）と一致する
 
 ### Step 4：起動確認（1時間）
 
