@@ -80,7 +80,7 @@ def rtf_series(t_sim_s: npt.ArrayLike, t_wall_ns: npt.ArrayLike, window_s: float
     """移動窓でのRTF。ROSノードで (sim時刻, time.time_ns()) の組を記録しておけば計算できる。"""
 ```
 
-Gazeboの統計（`/stats` トピックの `real_time_factor`）も参照値として記録します（`gz topic -e -t /stats` を別プロセスでファイルに流す）。
+Gazeboの統計（`/stats` トピックの `real_time_factor`）も参照値として記録します（`ign topic -e -t /stats` を別プロセスでファイルに流す）。
 
 ## 5. ハンズオン
 

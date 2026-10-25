@@ -1,4 +1,4 @@
-"""把持判定のための幾何計算（NumPy のみ。NumPy 1.26 でも動くこと）。docs/track2/32_grasp_judge_node.md 4
+"""把持判定のための幾何計算（NumPy のみ。NumPy 1.21 でも動くこと）。docs/track2/32_grasp_judge_node.md 4
 
 記号：T_a_b は「b 座標系の姿勢を a 座標系で表した 4x4 同次変換」。T_w_tcp は world から見た TCP。
 """

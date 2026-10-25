@@ -44,7 +44,7 @@
 | `ros2_ws/src/evla_nodes/evla_nodes/lockstep.py` | `LockstepClock`：pause / multi_step と、指定sim時刻のメッセージが揃うのを待つ処理 |
 | `src/evla/common/stamped_buffer.py` | 時刻つきメッセージのリングバッファ（ROS 非依存。`LockstepClock` が使う） |
 | `ros2_ws/src/evla_nodes/evla_nodes/sim_io.py` | `SimIO`：Gazebo とのやり取り（リセット、指令の送信、1フレーム進めて観測）。`eval_runner`（38章）と共有する |
-| `src/evla/dataset/raw_episode.py` | 生エピソードの書き込み・読み込み（NumPy 1.26でも動く） |
+| `src/evla/dataset/raw_episode.py` | 生エピソードの書き込み・読み込み（Python 3.10・NumPy 1.21でも動く） |
 | `src/evla/dataset/conventions.py` | 関節名の対応、rad→度、グリッパの0〜100への変換 |
 | `src/evla/dataset/to_lerobot.py` | 生エピソード群 → LeRobotDataset v3（`.venv-bench` で実行） |
 | `src/evla/dataset/quality.py` | 品質チェック（フレーム落ち、黒画像、統計、分布の図） |

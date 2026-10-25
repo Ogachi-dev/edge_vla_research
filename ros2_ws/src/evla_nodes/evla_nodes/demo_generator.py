@@ -15,7 +15,7 @@ ARM_GROUP = "arm"
 
 class MoveItJointPlanner:
     def __init__(self, node_name: str = "demo_generator_moveit") -> None:
-        from moveit.planning import MoveItPy, PlanRequestParameters  # 【要確認】Jazzy の moveit_py
+        from moveit.planning import MoveItPy, PlanRequestParameters  # 【要確認】Humble の moveit_py
         from moveit_configs_utils import MoveItConfigsBuilder
 
         config = (MoveItConfigsBuilder("so101", package_name="lerobot_moveit")  # 【要確認】robot 名と package

@@ -13,8 +13,8 @@
 
 - Python型ヒント：<https://docs.python.org/3/library/typing.html>
 - pytest入門：<https://docs.pytest.org/en/stable/getting-started.html>
-- rclpyの実行モデル（Executor・Callback Group）：<https://docs.ros.org/en/jazzy/Concepts/Intermediate/About-Executors.html>
-- QoS：<https://docs.ros.org/en/jazzy/Concepts/Intermediate/About-Quality-of-Service-Settings.html>
+- rclpyの実行モデル（Executor・Callback Group）：<https://docs.ros.org/en/humble/Concepts/Intermediate/About-Executors.html>
+- QoS：<https://docs.ros.org/en/humble/Concepts/Intermediate/About-Quality-of-Service-Settings.html>
 - ROSの時刻とsim time：<https://design.ros2.org/articles/clock_and_time.html>
 
 ## 3. 成果物

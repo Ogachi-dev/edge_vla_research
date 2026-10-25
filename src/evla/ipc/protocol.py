@@ -1,7 +1,7 @@
 """推論サーバーとの通信プロトコル（ZeroMQ マルチパート＋msgpack）。docs/track2/37_policy_node_zmq.md 4.1
 
 フレーム0 = msgpack のヘッダ、フレーム1.. = 配列の生のバイト列（ヘッダの "arrays" の順）。
-ROS のプロセス（NumPy 1.26）からも import するので、NumPy 2 専用の API は使わない。
+ROS のプロセス（Python 3.10・NumPy 1.21）からも import するので、NumPy 2 専用の API は使わない。
 """
 
 from __future__ import annotations

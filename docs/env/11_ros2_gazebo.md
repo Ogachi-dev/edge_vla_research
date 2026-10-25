@@ -1,4 +1,4 @@
-# env/11. ROS 2 Jazzy＋Gazebo Harmonic＋lerobot_ws
+# env/11. ROS 2 Humble＋Gazebo Fortress＋lerobot_ws
 
 > **ハンズオン**（共通の進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
 > - この章に穴埋めはありません。コマンドを順に実行し、各 Step の「確かめる」をすべてチェックしてから次へ進みます
@@ -6,16 +6,17 @@
 
 ## 1. 目的と計画書の対応
 
-- Ubuntu 24.04（WSL2）上に ROS 2 Jazzy と Gazebo Harmonic を入れ、SO-101 を Gazebo と MoveIt で動かせる状態にする。
+- Ubuntu 22.04（WSL2）上に ROS 2 Humble と Gazebo Fortress を入れ、SO-101 を Gazebo と MoveIt で動かせる状態にする。
+- **【計画書との差分】** 計画書は Ubuntu 24.04＋Jazzy＋Harmonic だが、検証端末の WSL（22.04＋Humble 導入済み）に合わせて、Humble の apt の標準の組み合わせ（Fortress）にした。理由と影響は [decisions](../decisions.md)。
 - 計画書の対応箇所：「環境構成（OS / ROS、ロボットモデル）」、日程D1（トラック2）
 
 ## 2. 前提知識・事前に読む資料
 
-- ROS 2 Jazzyのインストール（deb）：<https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html>
-- ROS 2とGazeboの組み合わせ：<https://gazebosim.org/docs/harmonic/ros_installation/>
-- ros_gz：<https://github.com/gazebosim/ros_gz/tree/jazzy>
-- gz_ros2_control：<https://control.ros.org/jazzy/doc/gz_ros2_control/doc/index.html>
-- MoveIt 2（Jazzy）：<https://moveit.picknik.ai/main/index.html>
+- ROS 2 Humbleのインストール（deb）：<https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html>
+- ROS 2とGazeboの組み合わせ：<https://gazebosim.org/docs/fortress/ros2_integration/>
+- ros_gz：<https://github.com/gazebosim/ros_gz/tree/humble>
+- gz_ros2_control：<https://control.ros.org/humble/doc/gz_ros2_control/doc/index.html>
+- MoveIt 2（Humble）：<https://moveit.picknik.ai/humble/index.html>
 - lerobot_ws：<https://github.com/Ar-Ray-code/lerobot_ws>（ブランチ `sts_servo`）
 
 ## 3. 成果物
@@ -30,6 +31,18 @@
 ## 4. インタフェース仕様
 
 ### 4.1 lerobot_ws の構成（調査で確認した事実）
+
+lerobot_ws は Jazzy＋Harmonic 向けに書かれています。Humble＋Fortress で使う部品は次のとおり確かめました（2026-10、ソースで確認）。
+
+| 部品 | Humble＋Fortress での扱い |
+| --- | --- |
+| `gz_ros2_control`（`ros-humble-gz-ros2-control` 0.7.x） | URDF の書き方（`gz_ros2_control-system`、`gz_ros2_control/GazeboSimSystem`）は Jazzy と同じ。Fortress 向けにビルドされている |
+| `ros_gz_sim` の `gz_sim.launch.py` | `gz_args` をそのまま使える。Fortress では中で `ign gazebo` を起動する |
+| SDF のプラグイン名（`gz-sim-*-system`、`gz::sim::systems::*`） | Fortress（ign-gazebo6）はファイル名の `gz-sim` を `ignition-gazebo` に読み替え、クラス名にも `gz::sim::` の別名を登録しているので、そのまま読める |
+| `ros_gz_bridge` の型名（`gz.msgs.*`） | `ignition.msgs.*` と `gz.msgs.*` のどちらも受け付ける |
+| CLI | `gz sim` / `gz topic` / `gz service` / `gz sdf` ではなく、**`ign gazebo` / `ign topic` / `ign service` / `ign sdf`** |
+
+**【要確認】** lerobot_ws 自体（launch・MoveIt の設定）が Humble でそのままビルド・起動できるかは、Step 3〜4 で確かめる。
 
 | 項目 | 値 |
 | --- | --- |
@@ -54,16 +67,17 @@ ros2 launch lerobot_moveit so101_moveit.launch.py
 
 ### 4.2 `scripts/ros_env.sh`（リポジトリに用意済み）
 
-ROS のノードは `evla`（`src/evla`）を import するので、`PYTHONPATH` に `src/` を通す行が要ります（Ubuntu 24.04 のシステム Python には `pip install` できないため）。下は、この行を足す前の雛形です。
+ROS のノードは `evla`（`src/evla`）を import するので、`PYTHONPATH` に `src/` を通す行が要ります（システムの Python に `pip install` すると apt の版と混ざるため）。下は、この行を足す前の雛形です。
 
 ```bash
 #!/usr/bin/env bash
 # 使い方: source scripts/ros_env.sh
 # venvが有効なら止める（ROSはシステムPythonで動かす）
 if [[ -n "${VIRTUAL_ENV:-}" ]]; then deactivate; fi
-source /opt/ros/jazzy/setup.bash
+source /opt/ros/humble/setup.bash
 source "$(git rev-parse --show-toplevel)/ros2_ws/install/setup.bash" 2>/dev/null || true
-export ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST   # Jazzyでは ROS_LOCALHOST_ONLY は非推奨
+export PYTHONNOUSERSITE=1                       # ~/.local の NumPy 2 を読まない（7節の落とし穴）
+export ROS_LOCALHOST_ONLY=1                      # Humble には ROS_AUTOMATIC_DISCOVERY_RANGE がない
 export ROS_DOMAIN_ID=42                          # TODO(you): 他の機器と被らない値
 # TODO(you): Gazeboの描画で問題が出たら、ここで環境変数を調整する（7節を参照）
 ```
@@ -72,35 +86,36 @@ export ROS_DOMAIN_ID=42                          # TODO(you): 他の機器と被
 
 各 Step は「**実行する → 出力を確かめる → メモに残す**」の1サイクルです。出力は `docs/notes/env_setup.md` に貼っていきます。ROS のシェルでは venv を有効にしません（`source scripts/ros_env.sh` が venv を止める）。
 
-### Step 1：ROS 2 Jazzy（1時間）
+### Step 1：ROS 2 Humble の追加パッケージ（1時間）
 
-1. 公式手順に従い、aptのリポジトリを追加して `ros-jazzy-desktop` と `ros-dev-tools` を入れる。
+1. `ros-humble-desktop` はこの端末に入っている（`dpkg -l ros-humble-desktop`）。入っていなければ、公式手順で apt のリポジトリを追加して `ros-humble-desktop` と `ros-dev-tools` を入れる。
 2. 追加パッケージ：
 
 ```bash
 sudo apt install -y \
-  ros-jazzy-ros-gz ros-jazzy-gz-ros2-control ros-jazzy-ros2-controllers \
-  ros-jazzy-moveit ros-jazzy-moveit-py ros-jazzy-xacro \
+  ros-humble-ros-gz ros-humble-gz-ros2-control ros-humble-ros2-controllers \
+  ros-humble-moveit ros-humble-moveit-py ros-humble-xacro \
   python3-zmq python3-msgpack python3-opencv
 ```
 
-3. `ros-jazzy-ros-gz` を入れると、Gazebo Harmonic（`gz sim`）も一緒に入る。
+3. `ros-humble-ros-gz` を入れると、Gazebo Fortress（`ign gazebo`）も一緒に入る。
+4. `pip install --user` で入れた NumPy 2 が `~/.local` にあると、apt の NumPy 1.21 より先に読まれる（`python3 -c "import numpy; print(numpy.__file__)"` で確かめる）。ROS のシェルでは `scripts/ros_env.sh` が `PYTHONNOUSERSITE=1` にして読まないようにしている。
 
 **確かめる**
 
-- [ ] `source /opt/ros/jazzy/setup.bash && ros2 doctor --report | head` がエラーなく動く
-- [ ] `gz sim --version` が 8.x
-- [ ] `python3 -c "import zmq, msgpack, cv2, numpy; print(numpy.__version__)"` が `1.26.x`（ROS 側は NumPy 1.26。[01](../01_repository_design.md) のプロセス分離の前提）
+- [ ] `source scripts/ros_env.sh && ros2 doctor --report | head` がエラーなく動く
+- [ ] `ign gazebo --version` が 6.x
+- [ ] `source scripts/ros_env.sh && python3 -c "import zmq, msgpack, cv2, numpy; print(numpy.__version__, numpy.__file__)"` が `1.21.x` で、場所が `/usr/lib/python3/dist-packages`（ROS 側は NumPy 1.21。[01](../01_repository_design.md) のプロセス分離の前提）
 
 ### Step 2：WSLgでの描画確認（30分〜）
 
 1. `sudo apt install mesa-utils` → `glxinfo -B` を実行し、`OpenGL renderer string` に `D3D12 (Intel(R) Iris(R) Xe Graphics)` が出ることを確認する。`llvmpipe` と出る場合はソフトウェア描画になっている。
-2. `gz sim shapes.sdf` を実行し、GUIが開くことを確認する。
+2. `ign gazebo shapes.sdf` を実行し、GUIが開くことを確認する。
 
 **確かめる**
 
 - [ ] `glxinfo -B` の `OpenGL renderer string` に `D3D12 (Intel(R) Iris(R) Xe Graphics)` が出る（`llvmpipe` ならソフトウェア描画。7節の落とし穴）
-- [ ] `gz sim shapes.sdf` の右下の RTF が 1.0 付近
+- [ ] `ign gazebo shapes.sdf` の右下の RTF が 1.0 付近
 
 ### Step 3：lerobot_ws のビルド（1時間）
 
@@ -111,6 +126,7 @@ cd .. && rosdep update && rosdep install --from-paths src --ignore-src -r -y
 colcon build --symlink-install
 ```
 
+- lerobot_ws は Jazzy＋Harmonic 向けです。Humble でビルドや起動に失敗したら、エラーと直し方をメモに残す。直すときは lerobot_ws を書き換えず、`evla_sim` 側のオーバーレイ（xacro の include、launch の引数）で吸収する（[01](../01_repository_design.md) 6節）。
 - `lerobot_ws` はリポジトリ全体が colcon ワークスペースです。`ros2_ws/src/lerobot_ws/src/*` の下にパッケージがありますが、colcon はサブディレクトリまで探索するので、このままでビルドできます。
 - **ルート側の `.gitignore` に `ros2_ws/src/lerobot_ws/` を追加する**か、git submodule として固定する（**【判断】** submoduleを推奨。コミットハッシュを固定でき、再現性が保てる）。
 
@@ -125,7 +141,7 @@ colcon build --symlink-install
 1. 3つのlaunchを順番に起動し、RVizのMotionPlanningパネルからplan＆executeを1回行う。
 2. `ros2 topic hz /joint_states` を実行する（10Hz前後なら、コントローラの `update_rate` が効いている）。
 3. `ros2 control list_controllers` で3つのコントローラが `active` になっていることを確認する。
-4. Gazeboの統計を確認する：`gz topic -e -t /stats -n 1`（**【要確認】** world名を付けた `/world/empty/stats` の場合もある。`gz topic -l | grep stats` で探す）。
+4. Gazeboの統計を確認する：`ign topic -e -t /stats -n 1`（**【要確認】** world名を付けた `/world/empty/stats` の場合もある。`ign topic -l | grep stats` で探す）。
 
 **確かめる**
 
@@ -155,7 +171,9 @@ colcon build --symlink-install
 | 症状 | 原因 | 対処 |
 | --- | --- | --- |
 | GazeboのGUIが真っ黒、または落ちる | WSLgのOpenGLとogre2の相性 | `--render-engine ogre` を試す。最後の手段は `LIBGL_ALWAYS_SOFTWARE=1`（遅い） |
-| メッシュが表示されない | `GZ_SIM_RESOURCE_PATH` に `share` ディレクトリが入っていない | lerobot_wsのlaunchは設定している。自作launchでも同様に設定する |
+| メッシュが表示されない | リソースパスに `share` ディレクトリが入っていない | lerobot_wsのlaunchは `GZ_SIM_RESOURCE_PATH` を設定している。Fortress が読むのは `IGN_GAZEBO_RESOURCE_PATH` なので、見えなければ同じ値を `IGN_GAZEBO_RESOURCE_PATH` にも入れる（**【要確認】**） |
+| ROS のノードで `numpy.core.multiarray failed to import` | `~/.local` の NumPy 2 を、apt の NumPy 1.21 でビルドされた C 拡張（cv_bridge など）が読んだ | `source scripts/ros_env.sh`（`PYTHONNOUSERSITE=1`）で起動する |
+| `colcon build` で `No module named 'catkin_pkg'` | venv を有効にしたシェルでビルドし、CMake が venv の Python を拾った | `deactivate` して `build/<pkg>` を消してからビルドし直す |
 | `ros2 topic list` に他ノードが見えない | DDSの探索範囲、またはドメインIDが違う | 全シェルで `scripts/ros_env.sh` を読む |
 | MoveItの実行がタイムアウトする | sim時刻とMoveItの実行時間監視がずれている | 全ノードで `use_sim_time:=true` にする。`trajectory_execution.allowed_execution_duration_scaling` を大きくする |
 | RTFが低い（0.3など） | カメラ描画の負荷。WSLgの描画が遅い | カメラなしで測り直して切り分ける。計画書の基準（RTF 0.5未満ならロックステップ主体）に従う |
@@ -169,7 +187,7 @@ ROSのトピックで1関節ずつ小さく動かし、RVizとGazeboで動きを
 
 <details><summary>L2：使うコマンド</summary>
 
-`ros2 topic pub --once`、`ros2 run tf2_ros tf2_echo base gripper`、`ros2 control list_controllers`、`ros2 param get /controller_manager update_rate`、`gz topic -l`、`gz topic -e -t <topic> -n 1`、`gz service -l`
+`ros2 topic pub --once`、`ros2 run tf2_ros tf2_echo base gripper`、`ros2 control list_controllers`、`ros2 param get /controller_manager update_rate`、`ign topic -l`、`ign topic -e -t <topic> -n 1`、`ign service -l`
 </details>
 
 <details><summary>L3：JointTrajectory を1発送るコマンドの形</summary>
