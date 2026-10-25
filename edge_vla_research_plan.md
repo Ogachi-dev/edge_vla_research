@@ -63,11 +63,13 @@ flowchart TB
 
 ## 環境構成
 
-WSL2にUbuntu 24.04を追加し、ROS 2 Jazzy＋Gazebo Harmonicで構築する。推論はROSとは別プロセス・別venvに置く。
+WSL2の既存のUbuntu 22.04で、ROS 2 Humble＋Gazebo Fortressで構築する。推論はROSとは別プロセス・別venv（uvのPython 3.12）に置く。
+
+> **変更（2026-10-26）**：当初は「Ubuntu 24.04を追加し、ROS 2 Jazzy＋Gazebo Harmonic」としていたが、検証端末のWSLに22.04＋Humbleが入っているため、こちらに合わせた。理由と影響は [docs/decisions.md](docs/decisions.md)。
 
 | 層 | 構成 | 備考 |
 | --- | --- | --- |
-| OS / ROS | WSL2上のUbuntu 24.04、ROS 2 Jazzy、Gazebo Harmonic | 22.04＋Humbleの標準組み合わせはGazebo Fortress。SO-101のROS 2パッケージ（[lerobot_ws](https://github.com/Ar-Ray-code/lerobot_ws)）はJazzy＋Harmonicで、ros2_controlとMoveIt 2の統合まで揃っている |
+| OS / ROS | WSL2上のUbuntu 22.04、ROS 2 Humble、Gazebo Fortress | 22.04＋Humbleの標準組み合わせ（apt）。SO-101のROS 2パッケージ（[lerobot_ws](https://github.com/Ar-Ray-code/lerobot_ws)）はJazzy＋Harmonic向けなので、Humbleで動くかを確かめ、差は自作パッケージ側で吸収する |
 | ロボットモデル | SO-101のURDF、ros2_control、MoveIt 2 | TCPフレームを両爪先端の中間に追加する |
 | データ形式 | LeRobotDataset v3.0 | 公開SO-101データと同じ関節名・順序 |
 | 推論ランタイム | PyTorch CPU、OpenVINO（CPU / GPU）、[vla.cpp](https://github.com/VinRobotics/vla.cpp)（CPU / SYCL） | vla.cppはWSL2とIntel GPUでの動作確認が明記されている |
@@ -232,7 +234,7 @@ GazeboのDetachableJointは、再接続時に子モデルをその時点の位�
 
 | 日 | トラック1：LIBEROベンチ | トラック2：Gazebo統合 |
 | --- | --- | --- |
-| D1 | iGPU認識の確認（WSL2）：clinfo・OpenVINOデバイス一覧 | Ubuntu 24.04＋Jazzy＋Harmonic、SO-101をGazeboで起動 |
+| D1 | iGPU認識の確認（WSL2）：clinfo・OpenVINOデバイス一覧 | Ubuntu 22.04＋Humble＋Fortress、SO-101をGazeboで起動 |
 | D2 | LIBERO起動（MuJoCo描画確認）、SmolVLA PyTorch CPUベースライン | Gazeboシーン構築：机・キューブ・箱・2カメラ・TCP |
 | D3 | OpenVINO（CPU / GPU）、vla.cpp（CPU / SYCL）で実行 | MoveIt Pick & Placeスクリプト、把持判定ノード・記録ノード |
 | D4 | 掃引：精度×スレッド数×解像度・視点数 | デモ生成（一晩）：成功エピソード100〜200 |
