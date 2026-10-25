@@ -10,12 +10,13 @@
     <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>  <!-- 【穴①】set_pose などのサービスを提供する system のファイル名 -->
     <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
     <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
-      <render_engine>ogre2</render_engine>
+      <render_engine>ogre</render_engine>  <!-- WSLg（OpenGL 4.1）では ogre2 のカメラが落ちる（env/11 7節） -->
     </plugin>
 
     <light type="directional" name="sun">
       <pose>0 0 3 0 0.3 0</pose>
-      <diffuse>{{ light }} {{ light }} {{ light }} 1</diffuse>
+      <diffuse>1 1 1 1</diffuse>
+      <intensity>{{ light }}</intensity>  <!-- 明るさの倍率。diffuse は 0〜1 の色なので、1 を超える値はここで与える -->
       <direction>-0.3 0.2 -1</direction>
       <cast_shadows>true</cast_shadows>
     </light>

@@ -37,3 +37,13 @@
 - vla.cpp の SYCL 版：oneAPI 2026.x は 22.04 に対応していないので、2025.x で試す。動かなければ、iGPU は OpenVINO と vla.cpp の OpenVINO バックエンドで測る。
 - Intel compute runtime：24.04 向けの PPA は使えない。22.04 向けの Intel のリポジトリか、22.04 の glibc で動く版の `.deb` を使う（env/10 Step 3）。
 - 物理エンジンは Fortress でも DART（既定）なので、DetachableJoint と DART の注意点（31章）はそのまま当てはまる。Harmonic との細かな挙動の差は、31章 Step 6 で確かめる。
+
+## 2026-10-26：Gazebo の描画エンジンを ogre（1.9）にする
+
+**決めたこと**：GUI もカメラのセンサも、Fortress の既定の ogre2 ではなく ogre（1.9）で描画する。world テンプレートの `<render_engine>` を `ogre`、`sim.launch.py` に `render_engine` 引数（既定 `ogre`）を足し、GUI の既定（`~/.ignition/gazebo/6/gui.config`）も `ogre` にする。
+
+**理由**：WSLg の D3D12 ドライバ（Mesa 23.2.1）は OpenGL 4.1 までで、ogre-next 2.2 の GL3Plus が使う機能がない。`ign gazebo shapes.sdf` の GUI と、ヘッドレス起動（`-s`）の上方カメラの両方が `Ogre::UnimplementedException`（`GL3PlusTextureGpu::copyTo`）で落ちた。ogre にすると、GUI は落ちず、上方カメラは 640×480 の RGB 画像を出した（`ros2 launch ros_gz_sim gz_sim.launch.py` 経由でも確認）。
+
+**影響**：データ生成と評価の画像は ogre（1.9）の描画になる（ogre2 の PBR とは見た目が違う）。学習と評価で同じエンジンを使うので比較には影響しないが、報告書の「環境」には描画エンジンを書く。
+
+**ついでに直したこと**：world テンプレートが光の明るさのランダム化（0.6〜1.2）を `<diffuse>` に入れていて、1 を超える値で Fortress の SDF の読み込み（sdformat 12）が失敗した。色は白のまま、明るさは `<intensity>` で与えるようにした。

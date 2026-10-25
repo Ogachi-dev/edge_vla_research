@@ -20,12 +20,14 @@ from launch_ros.parameter_descriptions import ParameterValue
 def generate_launch_description() -> LaunchDescription:
     share = Path(get_package_share_directory("evla_sim"))
     world = LaunchConfiguration("world")
+    render_engine = LaunchConfiguration("render_engine")
     robot_description = ParameterValue(Command(["xacro ", str(share / "urdf" / "so101_evla.urdf.xacro")]),
                                        value_type=str)  # 【穴①】xacro の出力を YAML として解釈させず、文字列のまま渡す指定
 
     gz = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(str(Path(get_package_share_directory("ros_gz_sim")) / "launch" / "gz_sim.launch.py")),
-        launch_arguments={"gz_args": [world, " -r"]}.items(),  # -r：起動直後から時間を進める
+        # -r：起動直後から時間を進める。WSLg の OpenGL は 4.1 までで ogre2 が落ちるので、既定は ogre
+        launch_arguments={"gz_args": [world, " -r --render-engine ", render_engine]}.items(),
     )
     rsp = Node(package="robot_state_publisher", executable="robot_state_publisher",
                parameters=[{"robot_description": robot_description, "use_sim_time": True}])
@@ -46,5 +48,6 @@ def generate_launch_description() -> LaunchDescription:
 
     return LaunchDescription([
         DeclareLaunchArgument("world", default_value="/tmp/evla_world_0.sdf"),
+        DeclareLaunchArgument("render_engine", default_value="ogre"),  # GUI とサーバー（カメラ）の両方
         gz, rsp, spawn, bridge, after_spawn, judge,
     ])
