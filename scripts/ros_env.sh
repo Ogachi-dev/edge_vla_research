@@ -3,10 +3,13 @@
 # venv が有効なら止める（ROS はシステムの Python で動かす）
 if [[ -n "${VIRTUAL_ENV:-}" ]]; then deactivate; fi
 REPO="$(git rev-parse --show-toplevel)"
-source /opt/ros/jazzy/setup.bash
+source /opt/ros/humble/setup.bash
 source "$REPO/ros2_ws/install/setup.bash" 2>/dev/null || true
 # ROS のノードから evla（src/evla）を import できるようにする。
-# Ubuntu 24.04 のシステム Python には pip install できない（PEP 668）ので、PYTHONPATH で通す
+# システムの Python に pip install すると apt の版と混ざるので、PYTHONPATH で通す
 export PYTHONPATH="$REPO/src:${PYTHONPATH:-}"
-export ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST   # Jazzy では ROS_LOCALHOST_ONLY は非推奨
+# ~/.local（pip install --user）の NumPy 2 が apt の NumPy 1.21 より先に読まれると、
+# cv_bridge などの C 拡張が import で落ちる。ROS のシェルではユーザーの site-packages を読まない
+export PYTHONNOUSERSITE=1
+export ROS_LOCALHOST_ONLY=1                      # Humble には ROS_AUTOMATIC_DISCOVERY_RANGE がない
 export ROS_DOMAIN_ID=42                          # TODO(you): 他の機器と被らない値
