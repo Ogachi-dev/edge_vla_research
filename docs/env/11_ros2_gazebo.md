@@ -155,15 +155,15 @@ colcon build --symlink-install
 ```bash
 # 端末1：Gazebo と SO-101
 ros2 launch lerobot_description so101_gazebo.launch.py
-# 端末2：コントローラ（3つとも "Configured and activated" と出れば終わる）
-for c in joint_state_broadcaster arm_controller gripper_controller; do
-  ros2 run controller_manager spawner "$c"
-done
+# 端末2：コントローラ（1行ずつ実行し、それぞれ "Configured and activated" と出れば終わる）
+ros2 run controller_manager spawner joint_state_broadcaster
+ros2 run controller_manager spawner arm_controller
+ros2 run controller_manager spawner gripper_controller
 # 端末3：MoveIt と RViz
 ros2 launch lerobot_moveit so101_moveit.launch.py
 ```
 
-   RVizのMotionPlanningパネルからplan＆executeを1回行う。
+   RViz の左の Displays → Global Options → **Fixed Frame を `base` に直す**（lerobot_ws の `moveit.rviz` は `Base` と大文字で書かれていて、URDF のリンク名 `base` と一致しないため、`Frame [Base] does not exist` になる。lerobot_ws は変更しないので、起動のたびに直す）。そのうえで、RVizのMotionPlanningパネルからplan＆executeを1回行う。
 2. `ros2 topic hz /joint_states` を実行する（10Hz前後なら、コントローラの `update_rate` が効いている）。
 3. `ros2 control list_controllers` で3つのコントローラが `active` になっていることを確認する。
 4. Gazeboの統計を確認する：`ign topic -e -t /stats -n 1`（**【要確認】** world名を付けた `/world/empty/stats` の場合もある。`ign topic -l | grep stats` で探す）。
@@ -199,6 +199,8 @@ ros2 launch lerobot_moveit so101_moveit.launch.py
 | メッシュが表示されない | リソースパスに `share` ディレクトリが入っていない | lerobot_wsのlaunchは `GZ_SIM_RESOURCE_PATH` を設定している。Fortress が読むのは `IGN_GAZEBO_RESOURCE_PATH` なので、見えなければ同じ値を `IGN_GAZEBO_RESOURCE_PATH` にも入れる（**【要確認】**） |
 | ROS のノードで `numpy.core.multiarray failed to import` | `~/.local` の NumPy 2 を、apt の NumPy 1.21 でビルドされた C 拡張（cv_bridge など）が読んだ | `source scripts/ros_env.sh`（`PYTHONNOUSERSITE=1`）で起動する |
 | `colcon build` で `No module named 'catkin_pkg'` | venv を有効にしたシェルでビルドし、CMake が venv の Python を拾った | `deactivate` して `build/<pkg>` を消してからビルドし直す |
+| RViz に `Frame [Base] does not exist` と出る | lerobot_ws の `moveit.rviz` の Fixed Frame が `Base`（大文字）で、リンク名は `base` | Global Options の Fixed Frame を `base`（または `world`）に直す |
+| RViz にロボットが出ない、関節が動かない | コントローラ（特に `joint_state_broadcaster`）が起動していない | Step 4 の spawner を実行し、`ros2 control list_controllers` で3つが `active` か確かめる |
 | `ros2 topic list` に他ノードが見えない | DDSの探索範囲、またはドメインIDが違う | 全シェルで `scripts/ros_env.sh` を読む |
 | MoveItの実行がタイムアウトする | sim時刻とMoveItの実行時間監視がずれている | 全ノードで `use_sim_time:=true` にする。`trajectory_execution.allowed_execution_duration_scaling` を大きくする |
 | RTFが低い（0.3など） | カメラ描画の負荷。WSLgの描画が遅い | カメラなしで測り直して切り分ける。計画書の基準（RTF 0.5未満ならロックステップ主体）に従う |
