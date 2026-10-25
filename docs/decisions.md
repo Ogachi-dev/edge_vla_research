@@ -47,3 +47,11 @@
 **影響**：データ生成と評価の画像は ogre（1.9）の描画になる（ogre2 の PBR とは見た目が違う）。学習と評価で同じエンジンを使うので比較には影響しないが、報告書の「環境」には描画エンジンを書く。
 
 **ついでに直したこと**：world テンプレートが光の明るさのランダム化（0.6〜1.2）を `<diffuse>` に入れていて、1 を超える値で Fortress の SDF の読み込み（sdformat 12）が失敗した。色は白のまま、明るさは `<intensity>` で与えるようにした。
+
+## 2026-10-26：描画はソフトウェア描画（llvmpipe）＋ogre2 にする（上の「ogre（1.9）にする」を置き換える）
+
+**決めたこと**：ogre（1.9）をやめ、Gazebo の描画エンジンを ogre2 に戻す。代わりに `scripts/ros_env.sh` で `LIBGL_ALWAYS_SOFTWARE=1` にして、ROS のシェルで起動する Gazebo と RViz を Mesa の llvmpipe（OpenGL 4.5）で描画する。
+
+**理由**：ogre（1.9）を D3D12 で動かすと、lerobot_ws の SO-101 を表示したときにロボットが消えたり現れたりした。D3D12 には ogre2 が使う `GL_ARB_copy_image` がないが、llvmpipe にはある。llvmpipe＋ogre2 では、同じ launch でちらつきがなくなった（目視で確認）。カメラ付きの world をヘッドレスで起動しても、上方カメラは 640×480 の画像を出し、RTF は 0.98（D3D12＋ogre は 0.95）だった。
+
+**影響**：描画が CPU を使うので、推論のベンチ（トラック1）と Gazebo を同時に動かすと CPU を取り合う。Gazebo の評価はロックステップ（sim 時刻）で行うので結果は変わらないが、所要時間は延びる。報告書の「環境」には「Gazebo は llvmpipe＋ogre2 で描画」と書く。上の判断で書き換えた `~/.ignition/gazebo/6/gui.config` は `ogre2` に戻した。
