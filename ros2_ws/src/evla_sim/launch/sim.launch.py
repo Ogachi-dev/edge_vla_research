@@ -26,7 +26,7 @@ def generate_launch_description() -> LaunchDescription:
 
     gz = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(str(Path(get_package_share_directory("ros_gz_sim")) / "launch" / "gz_sim.launch.py")),
-        # -r：起動直後から時間を進める。WSLg の OpenGL は 4.1 までで ogre2 が落ちるので、既定は ogre
+        # -r：起動直後から時間を進める。ogre2 は WSLg の D3D12 では落ちるので、ros_env.sh の llvmpipe で動かす
         launch_arguments={"gz_args": [world, " -r --render-engine ", render_engine]}.items(),
     )
     rsp = Node(package="robot_state_publisher", executable="robot_state_publisher",
@@ -48,6 +48,6 @@ def generate_launch_description() -> LaunchDescription:
 
     return LaunchDescription([
         DeclareLaunchArgument("world", default_value="/tmp/evla_world_0.sdf"),
-        DeclareLaunchArgument("render_engine", default_value="ogre"),  # GUI とサーバー（カメラ）の両方
+        DeclareLaunchArgument("render_engine", default_value="ogre2"),  # GUI とサーバー（カメラ）の両方
         gz, rsp, spawn, bridge, after_spawn, judge,
     ])

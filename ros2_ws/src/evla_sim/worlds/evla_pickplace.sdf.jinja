@@ -10,7 +10,7 @@
     <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>  <!-- 【穴①】set_pose などのサービスを提供する system のファイル名 -->
     <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
     <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
-      <render_engine>ogre</render_engine>  <!-- WSLg（OpenGL 4.1）では ogre2 のカメラが落ちる（env/11 7節） -->
+      <render_engine>ogre2</render_engine>  <!-- WSLg の D3D12 では落ちるので llvmpipe で動かす（env/11 Step 2） -->
     </plugin>
 
     <light type="directional" name="sun">
