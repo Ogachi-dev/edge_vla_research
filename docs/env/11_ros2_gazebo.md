@@ -203,6 +203,8 @@ ros2 launch lerobot_moveit so101_moveit.launch.py
 | RViz に `Frame [Base] does not exist` と出る | lerobot_ws の `moveit.rviz` の Fixed Frame が `Base`（大文字）で、リンク名は `base` | Global Options の Fixed Frame を `base`（または `world`）に直す |
 | RViz でリンクがすべて原点に重なる | RViz が壁時計の時刻で TF を探している（MoveIt の launch が `use_sim_time` を渡していない） | `ros2 param set /rviz2 use_sim_time true` |
 | RViz に MotionPlanning が見当たらない | lerobot_ws の `moveit.rviz` に MotionPlanning の表示が入っていない | Add → `moveit_ros_visualization` → `MotionPlanning` を追加する（Step 4） |
+| plan が `No ContextLoader for planner_id '' found` で失敗する | Planning Library に Pilz（`pilz_industrial_motion_planner`）を選び、アルゴリズム（PTP / LIN / CIRC）を選んでいない | 既定の OMPL に戻す。Pilz を使うなら `PTP` を選ぶ |
+| execute が `Action client not connected to action server: arm_controller/follow_joint_trajectory` で失敗する、`Detected jump back in time` が続く | Gazebo が2つ動いていて `/clock` が2つある、またはコントローラを起動し直した | 全部の端末を止め、`pgrep -af "ign gazebo"` で残りがないことを確かめてから、Step 4 の順（Gazebo → spawner → MoveIt）で起動し直す。別の Gazebo を同時に動かすなら、`ROS_DOMAIN_ID` と `IGN_PARTITION` を変える |
 | RViz にロボットが出ない、関節が動かない | コントローラ（特に `joint_state_broadcaster`）が起動していない | Step 4 の spawner を実行し、`ros2 control list_controllers` で3つが `active` か確かめる |
 | `ros2 topic list` に他ノードが見えない | DDSの探索範囲、またはドメインIDが違う | 全シェルで `scripts/ros_env.sh` を読む |
 | MoveItの実行がタイムアウトする | sim時刻とMoveItの実行時間監視がずれている | 全ノードで `use_sim_time:=true` にする。`trajectory_execution.allowed_execution_duration_scaling` を大きくする |
