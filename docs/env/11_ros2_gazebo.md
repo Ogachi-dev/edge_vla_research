@@ -163,7 +163,7 @@ ros2 launch lerobot_moveit so101_moveit.launch.py
    2. **Fixed Frame を `base` に直す**：Displays → Global Options → Fixed Frame。設定は `Base`（大文字）で、URDF のリンク名 `base` と一致しないため、`Frame [Base] does not exist` になる。
    3. **MotionPlanning を追加する**：設定には Grid と RobotModel しかない。Displays の下の Add → By display type → `moveit_ros_visualization` → `MotionPlanning` を選び、Planning Request の Planning Group を `arm` にする。
 
-   そのうえで、MotionPlanning パネル（Planning タブ）から plan＆execute を1回行う。
+   そのうえで、MotionPlanning パネル（Planning タブ）から plan＆execute を1回行う。**Planning Library は OMPL のまま使う**。lerobot_moveit には CHOMP と Pilz も入っているが、CHOMP は要求のたびに計算の前の準備に 30 秒以上かかり、その間にアームが少し動いて execute が `start point deviates` で中止される（どちらもこの端末で確認。ドメインを分けた環境で関節1を ±0.4 rad 動かす目標を送り、OMPL は2回とも約 6 秒で成功、CHOMP は2回とも約 38 秒かかって失敗）。
 2. `ros2 topic hz /joint_states` を実行する（10Hz前後なら、コントローラの `update_rate` が効いている）。
 3. `ros2 control list_controllers` で3つのコントローラが `active` になっていることを確認する。
 4. Gazeboの統計を確認する：`ign topic -e -t /stats -n 1`（**【要確認】** world名を付けた `/world/empty/stats` の場合もある。`ign topic -l | grep stats` で探す）。
@@ -203,6 +203,8 @@ ros2 launch lerobot_moveit so101_moveit.launch.py
 | RViz に `Frame [Base] does not exist` と出る | lerobot_ws の `moveit.rviz` の Fixed Frame が `Base`（大文字）で、リンク名は `base` | Global Options の Fixed Frame を `base`（または `world`）に直す |
 | RViz でリンクがすべて原点に重なる | RViz が壁時計の時刻で TF を探している（MoveIt の launch が `use_sim_time` を渡していない） | `ros2 param set /rviz2 use_sim_time true` |
 | RViz に MotionPlanning が見当たらない | lerobot_ws の `moveit.rviz` に MotionPlanning の表示が入っていない | Add → `moveit_ros_visualization` → `MotionPlanning` を追加する（Step 4） |
+| `ros2 param set` などが `TimeoutError: [Errno 110] Connection timed out`（`ros2cli/node/daemon.py`）で落ちる | ROS 2 のデーモン（`ros2 daemon`）が応答しない | `ros2 daemon stop` → もう一度実行する（デーモンは自動で起動し直す） |
+| plan のあと execute まで 30 秒以上かかる、`start point deviates from current robot state` で中止される | Planning Library に CHOMP を選んでいる | OMPL に戻す（Step 4） |
 | plan が `No ContextLoader for planner_id '' found` で失敗する | Planning Library に Pilz（`pilz_industrial_motion_planner`）を選び、アルゴリズム（PTP / LIN / CIRC）を選んでいない | 既定の OMPL に戻す。Pilz を使うなら `PTP` を選ぶ |
 | execute が `Action client not connected to action server: arm_controller/follow_joint_trajectory` で失敗する、`Detected jump back in time` が続く | Gazebo が2つ動いていて `/clock` が2つある、またはコントローラを起動し直した | 全部の端末を止め、`pgrep -af "ign gazebo"` で残りがないことを確かめてから、Step 4 の順（Gazebo → spawner → MoveIt）で起動し直す。別の Gazebo を同時に動かすなら、`ROS_DOMAIN_ID` と `IGN_PARTITION` を変える |
 | RViz にロボットが出ない、関節が動かない | コントローラ（特に `joint_state_broadcaster`）が起動していない | Step 4 の spawner を実行し、`ros2 control list_controllers` で3つが `active` か確かめる |
