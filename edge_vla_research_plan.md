@@ -23,9 +23,9 @@
 
 | 項目 | 内容 |
 | --- | --- |
-| 検証端末 | Intel Core i7-1360P（Raptor Lake、NPUなし）、RAM 64GB、Iris Xe（iGPU） |
+| 検証端末 | Intel Core i7-1360P（Raptor Lake、NPUなし）、RAM 32GB、Iris Xe（iGPU） |
 | OS | Windows 11 + WSL2 |
-| 学習環境 | RTX PRO 6000 |
+| 学習環境 | RTX PRO 6000 搭載のサーバー（RAM 64GB） |
 | 期間 | 2週間（10営業日） |
 | ロボット | SO-ARM101（5関節＋グリッパの6自由度） |
 | タスク | Pick & Place（キューブを箱に入れる） |

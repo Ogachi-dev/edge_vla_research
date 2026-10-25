@@ -85,7 +85,7 @@
 執筆前に一次情報（各リポジトリのソース・ドキュメント・HFのモデルカード）を確認しました。計画書に影響する事項を先にまとめます。詳細は各章にあります。
 
 1. **WSL2ではP/Eコアを区別できない**：WSL2のゲストからは「8コア×2スレッド」の均質なCPUに見え、`/sys/devices/cpu_core` も存在しない（この端末で確認済み）。WSL内の `taskset` ではPコアだけに固定できない。→ [env/10](env/10_wsl2_and_igpu.md#7-落とし穴)、[26](track1/26_bench_mode_a.md)
-2. **WSL2に見えているメモリは15GB**：64GB搭載だが、`.wslconfig` の既定でWSLには約半分しか割り当てられない。→ [env/10](env/10_wsl2_and_igpu.md)
+2. **WSL2に見えているメモリは15GB**：32GB搭載だが、`.wslconfig` の既定でWSLには約半分しか割り当てられない。→ [env/10](env/10_wsl2_and_igpu.md)
 3. **LeRobotはPython 3.12以上が必須**（v0.6系）。現在のUbuntu 22.04（Python 3.10）では動かないので、Ubuntu 24.04に統一する。→ [env/11](env/11_ros2_gazebo.md)、[env/12](env/12_inference_envs.md)
 4. **OpenVINO版SmolVLAの配布元が変わった**：計画書の `modelapi/smolvla-libero-fp16-ov-catalog` は現在アクセスできない（401）。代わりに `OpenVINO/smolvla-libero-{fp16,bf16,w8a16}-ov` が公開されている（Physical AIフレームワーク `physicalai` 向け）。→ [24](track1/24_runtime_openvino.md)
 5. **iGPUを使う経路は3つある**：OpenVINO（physicalai）、vla.cpp＋SYCL、vla.cpp＋OpenVINOバックエンド（`GGML_OPENVINO_DEVICE=GPU`）。→ [25](track1/25_runtime_vlacpp.md)

@@ -35,9 +35,9 @@
 
 ```ini
 [wsl2]
-memory=48GB          # 64GB中。Windows側とGazebo描画の余裕を残す
+memory=24GB          # 32GB中。Windows側（iGPU の共有メモリもここから取られる）に 8GB 残す
 processors=16        # 論理CPUをすべて渡す（実験によっては8に絞る）
-swap=16GB
+swap=8GB
 # TODO(you): 必要に応じて追加する（例：networkingMode=mirrored）
 ```
 
@@ -82,7 +82,7 @@ def probe(vcpus: Sequence[int], rounds: int, n_iter: int) -> list[ProbeResult]:
 **確かめる**
 
 - [ ] `powercfg /list` で、使っている電源プランに `*` が付いている。電源モードと合わせてメモに残す
-- [ ] WSL を起動し直して `free -g` の total が約47GB、`nproc` が `.wslconfig` の `processors` と同じ
+- [ ] WSL を起動し直して `free -g` の total が約23GB、`nproc` が `.wslconfig` の `processors` と同じ
 
 ### Step 2：Ubuntu 24.04 ディストリビューションの追加（30分）
 
@@ -159,6 +159,7 @@ python -c "import openvino as ov; c = ov.Core(); print([(d, c.get_property(d, 'F
 | OpenVINOで `GPU` が見えない | `intel-opencl-icd` が見つからない、または `libOpenCL` の版が合わない | `ls /etc/OpenCL/vendors/` に `intel.icd` があるか確認する |
 | 測るたびに速さが変わる | vCPUがホスト側で移動している。ターボの持続時間切れ | Step 4の実験で確かめる。温度・クロックをWindows側で記録する（[40](../common/40_metrics_measurement.md)） |
 | `taskset -c 0-7` で速くならない | WSL内のvCPU番号は物理Pコアを意味しない | 上記の代替案 |
+| OV-GPU の推論や Gazebo の描画中に Windows 全体が重くなる、落ちる | RAM 32GB のうち WSL に 24GB を渡しているので、Windows 側と iGPU の共有メモリが足りない | `memory=20GB` に下げる。Gazebo とトラック1のベンチを同時に動かさない |
 
 ## 8. ヒント
 
@@ -189,7 +190,7 @@ sched_setaffinity(0, 元のaffinity)          # 戻す
 
 ## 9. 完了条件（DoD）
 
-- [ ] Ubuntu 24.04のWSLで `free -g` の total が約47GB
+- [ ] Ubuntu 24.04のWSLで `free -g` の total が約23GB
 - [ ] `clinfo -l` でIntel GPUが列挙される
 - [ ] OpenVINO のデバイス一覧が `CPU` と `GPU` の両方を表示する（5節 Step 3。[env/12](12_inference_envs.md) の後）
 - [ ] vCPUの推定実験の結果（図と表）があり、「WSL内でP/E固定ができるか」の結論がメモに書かれている
