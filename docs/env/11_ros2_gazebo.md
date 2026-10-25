@@ -110,11 +110,20 @@ sudo apt install -y \
 ### Step 2：WSLgでの描画確認（30分〜）
 
 1. `sudo apt install mesa-utils` → `glxinfo -B` を実行し、`OpenGL renderer string` に `D3D12 (Intel(R) Iris(R) Xe Graphics)` が出ることを確認する。`llvmpipe` と出る場合はソフトウェア描画になっている。
-2. `ign gazebo shapes.sdf` を実行し、GUIが開くことを確認する。
+2. `Max core profile version` を見る。WSLg の D3D12 ドライバ（Mesa 23.2）は **4.1** までで、Fortress の既定の描画エンジン ogre2（ogre-next 2.2）が使う機能（4.3 以降）がない。そのまま起動すると、GUI が白いまま `Ogre::UnimplementedException ... GL3PlusTextureGpu::copyTo` で落ちる。カメラのセンサも同じ理由で落ちる。
+3. 描画エンジンを ogre（1.9）にする。GUI の既定は `~/.ignition/gazebo/6/gui.config`（初回の起動で作られる）の `<engine>` なので、ここを書き換える（lerobot_ws の launch のように、起動オプションを変えられない場合にも効く）。
+
+```bash
+cp ~/.ignition/gazebo/6/gui.config ~/.ignition/gazebo/6/gui.config.bak-ogre2
+sed -i 's#<engine>ogre2</engine>#<engine>ogre</engine>#' ~/.ignition/gazebo/6/gui.config
+```
+
+4. `ign gazebo shapes.sdf` を実行し、GUIが開くことを確認する（一度だけ試すなら `--render-engine ogre` を付けてもよい）。`evla_sim` の world と `sim.launch.py` は ogre を指定してある（31章）。
 
 **確かめる**
 
 - [ ] `glxinfo -B` の `OpenGL renderer string` に `D3D12 (Intel(R) Iris(R) Xe Graphics)` が出る（`llvmpipe` ならソフトウェア描画。7節の落とし穴）
+- [ ] `glxinfo -B` の `Max core profile version` をメモに残した（4.1 なら ogre を使う）
 - [ ] `ign gazebo shapes.sdf` の右下の RTF が 1.0 付近
 
 ### Step 3：lerobot_ws のビルド（1時間）
@@ -170,7 +179,7 @@ colcon build --symlink-install
 
 | 症状 | 原因 | 対処 |
 | --- | --- | --- |
-| GazeboのGUIが真っ黒、または落ちる | WSLgのOpenGLとogre2の相性 | `--render-engine ogre` を試す。最後の手段は `LIBGL_ALWAYS_SOFTWARE=1`（遅い） |
+| GazeboのGUIが白いまま `Ogre::UnimplementedException`（`GL3PlusTextureGpu::copyTo`）で落ちる | WSLg の OpenGL が 4.1 までで、ogre2 が使う機能がない（この端末で確認） | ogre にする（Step 2）。`--render-engine ogre`、または `~/.ignition/gazebo/6/gui.config` の `<engine>ogre</engine>`。最後の手段は `LIBGL_ALWAYS_SOFTWARE=1`（遅い） |
 | メッシュが表示されない | リソースパスに `share` ディレクトリが入っていない | lerobot_wsのlaunchは `GZ_SIM_RESOURCE_PATH` を設定している。Fortress が読むのは `IGN_GAZEBO_RESOURCE_PATH` なので、見えなければ同じ値を `IGN_GAZEBO_RESOURCE_PATH` にも入れる（**【要確認】**） |
 | ROS のノードで `numpy.core.multiarray failed to import` | `~/.local` の NumPy 2 を、apt の NumPy 1.21 でビルドされた C 拡張（cv_bridge など）が読んだ | `source scripts/ros_env.sh`（`PYTHONNOUSERSITE=1`）で起動する |
 | `colcon build` で `No module named 'catkin_pkg'` | venv を有効にしたシェルでビルドし、CMake が venv の Python を拾った | `deactivate` して `build/<pkg>` を消してからビルドし直す |

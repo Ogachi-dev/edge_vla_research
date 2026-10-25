@@ -365,7 +365,8 @@ ros2 service call /world/evla/control ros_gz_interfaces/srv/ControlWorld "{world
 | キューブがはじけ飛ぶ | 初期状態でキューブと爪が重なっている（DARTの制約）。衝突マスクが効いていない | キューブの初期位置を爪から離す。5節 Step 6で確認する |
 | 手首カメラが表示されない | 固定関節の統合（lumping）でリンクが消え、センサが行方不明になった | `preserveFixedJoint`。またはセンサを `gripper` に直接付け、姿勢で位置を調整する |
 | DetachableJointが `child model not found` | ロボットのspawn時点でキューブが存在しない | キューブはworld SDFに入れておく（後からspawnしない） |
-| カメラ画像が真っ黒 | Sensors systemがない、またはrender engineが使えない | worldに `gz-sim-sensors-system` を入れる。ogre2が駄目ならogreを試す |
+| カメラ画像が真っ黒、またはサーバーが `Ogre::UnimplementedException` で落ちる | Sensors systemがない、またはrender engineが使えない | worldに `gz-sim-sensors-system` を入れる。WSLg（OpenGL 4.1）では ogre2 が落ちるので、world の `<render_engine>` と `sim.launch.py` の `render_engine` は ogre にしてある（[env/11](../env/11_ros2_gazebo.md) Step 2） |
+| world の読み込みで `The value <diffuse>1.038 ...</diffuse> is invalid` | 色（`diffuse`）は 0〜1 なので、1 を超える明るさを入れられない | 明るさのランダム化は light の `<intensity>`（倍率）で与える（テンプレートはそうしてある） |
 | `/clock` が進まない | worldをpause状態で起動した（`-r` なし） | 仕様。生成時は episode_runner が step する（34章） |
 
 ## 8. ヒント
