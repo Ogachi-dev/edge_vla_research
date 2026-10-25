@@ -11,9 +11,11 @@ import types
 import typing
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import yaml
+
+T = TypeVar("T")  # ROS 側の Python 3.10 でも動くよう、3.12 の def f[T] は使わない
 
 
 def parse_override(item: str) -> tuple[list[str], Any]:
@@ -50,7 +52,7 @@ def _convert(tp: Any, value: Any, where: str) -> Any:
     return value
 
 
-def from_dict[T](cls: type[T], data: Mapping[str, Any], where: str = "") -> T:
+def from_dict(cls: type[T], data: Mapping[str, Any], where: str = "") -> T:
     """辞書 → dataclass。未知のキーがあれば ValueError（タイポの早期検出）。"""
     hints = typing.get_type_hints(cls)
     names = {f.name for f in dataclasses.fields(cls)}  # 【穴③】dataclass のフィールド一覧を返す関数
@@ -61,7 +63,7 @@ def from_dict[T](cls: type[T], data: Mapping[str, Any], where: str = "") -> T:
     return cls(**kwargs)
 
 
-def load_config[T](path: Path, cls: type[T], overrides: list[str] | None = None) -> T:
+def load_config(path: Path, cls: type[T], overrides: list[str] | None = None) -> T:
     """YAMLを読み、`a.b=3` 形式のoverridesを適用して、dataclass cls に変換する。
     未知のキーがあれば ValueError（タイポの早期検出）。"""
     with open(path, encoding="utf-8") as f:

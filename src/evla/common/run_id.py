@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +20,7 @@ def config_hash(cfg: Mapping[str, Any], n: int = 6) -> str:
 
 def new_run_id(track: str, mode: str, cfg: Mapping[str, Any]) -> str:
     """'20261014-103012_t1_modeA_3fa9c1' 形式のIDを返す。"""
-    stamp = datetime.now(UTC).strftime('%Y%m%d-%H%M%S')  # 【穴④】20261014-103012 になる書式文字列
+    stamp = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')  # 【穴④】20261014-103012 になる書式文字列
     return f"{stamp}_{track}_{mode}_{config_hash(cfg)}"
 
 

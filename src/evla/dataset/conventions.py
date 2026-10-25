@@ -1,6 +1,6 @@
 """関節名・単位・符号の対応（記録・変換・ポリシーノードで共通に使う唯一の定義）。docs/track2/34_episode_recorder.md 4.2
 
-ROS 側（NumPy 1.26）からも import する。
+ROS 側（Python 3.10・NumPy 1.21）からも import する。
 """
 
 from __future__ import annotations

@@ -3,7 +3,7 @@
 > **ハンズオン**（共通の進め方は [03_fill_in_guide](../03_fill_in_guide.md)）
 > - この章に穴埋めはありません。コマンドを順に実行し、各 Step の「確かめる」をすべてチェックしてから次へ進みます
 > - 自分で書くもの：`scripts/probe_vcpu_speed.py`（Step 4。4.3節のインタフェースのとおり）。4.2節の `check_igpu.py` は任意（Step 3 の1行のコマンドで代用できる）
-> - ゴール：Ubuntu 24.04 の WSL から iGPU が見え、「WSL 内で P/E コアを固定できるか」の結論が出ている
+> - ゴール：Ubuntu 22.04 の WSL から iGPU が見え、「WSL 内で P/E コアを固定できるか」の結論が出ている
 
 ## 1. 目的と計画書の対応
 
@@ -84,30 +84,32 @@ def probe(vcpus: Sequence[int], rounds: int, n_iter: int) -> list[ProbeResult]:
 - [ ] `powercfg /list` で、使っている電源プランに `*` が付いている。電源モードと合わせてメモに残す
 - [ ] WSL を起動し直して `free -g` の total が約23GB、`nproc` が `.wslconfig` の `processors` と同じ
 
-### Step 2：Ubuntu 24.04 ディストリビューションの追加（30分）
+### Step 2：使うディストリビューションの確認（15分）
 
 ```powershell
-wsl --install -d Ubuntu-24.04
-wsl -l -v      # VERSION が 2 であること
+wsl -l -v      # 使うディストリビューションの VERSION が 2 であること
 ```
 
-**【判断】** 作業はすべて **Ubuntu 24.04 側**で行う。既存の22.04は触らずに残す。理由：
+**【判断】** 作業はすべて、ROS 2 Humble を入れてある既存の **Ubuntu 22.04** で行う（**【計画書との差分】** 計画書は 24.04 を追加する案。理由は [decisions](../decisions.md)）。24.04 を選んだ理由だった3点は、次のように扱う。
 
-- LeRobot 0.6系は Python 3.12 以上が必須。
-- vla.cppのビルド済みバイナリは Ubuntu 24.04 以降の glibc を要求する。
-- oneAPI 2026.x は22.04（jammy）のサポートを打ち切った。
+| 24.04 を選んだ理由 | 22.04 での扱い |
+| --- | --- |
+| LeRobot 0.6系は Python 3.12 以上が必須 | `.venv-bench` は uv が入れた Python 3.12 で作る（システムの 3.10 は使わない）。ROS 側（3.10）からは lerobot を import しない（[01](../01_repository_design.md) 4.1） |
+| vla.cpp のビルド済みバイナリは 24.04 以降の glibc を要求する | 22.04 の glibc は 2.35 なので、ビルド済みバイナリは使わず、ソースからビルドする（vla.cpp は CMake 3.22・C++17 で、22.04 の CMake 3.22.1・gcc 11 で足りる） |
+| oneAPI 2026.x は 22.04（jammy）のサポートを打ち切った | vla.cpp の SYCL 版は oneAPI 2025.x で試す（**【要確認】**）。OpenVINO の GPU と vla.cpp の OpenVINO バックエンドは oneAPI が要らない |
 
 **確かめる**
 
-- [ ] `wsl -l -v` で `Ubuntu-24.04` の VERSION が `2`
-- [ ] Ubuntu 側で `lsb_release -a` が `24.04`、`python3 --version` が `3.12.x`
+- [ ] `wsl -l -v` で、使うディストリビューションの VERSION が `2`
+- [ ] Ubuntu 側で `lsb_release -a` が `22.04`、`python3 --version` が `3.10.x`、`uv python list` に 3.12 がある
 
 ### Step 3：WSL内でのGPU確認（1時間）
 
 1. デバイスファイルを確認する：`ls -l /dev/dxg`（存在すればよい。Intel iGPUの場合、WSLには `/dev/dri` が無いことが多い）
 2. Intel compute runtime を入れる。**【要確認】** パッケージの入手元は時期によって変わります。2026年時点の候補は次の2つです。
-   - Ubuntu 24.04向けのIntel PPA（`ppa:kobuk-team/intel-graphics`）から `libze-intel-gpu1 libze1 intel-opencl-icd clinfo` を入れる
-   - <https://github.com/intel/compute-runtime/releases> の `.deb` 一式を入れる
+   - Intel の GPU 用 apt リポジトリ（<https://dgpu-docs.intel.com/>）の 22.04（jammy）向けから `intel-opencl-icd libze1 clinfo` などを入れる。Intel の PPA（`ppa:kobuk-team/intel-graphics`）は 24.04 以降向けなので使えない
+   - <https://github.com/intel/compute-runtime/releases> の `.deb` 一式を入れる。最新版は新しい Ubuntu でビルドされているので、22.04 の glibc（2.35）で動く版かを確かめる
+   - 22.04 の標準の `intel-opencl-icd`（22.14）は古く、WSL で GPU が見えないことがある
    - どちらの場合も、**WSLをサポートするビルドか**をリリースノートで確認する。
 3. `clinfo -l` を実行する。`Intel(R) Graphics` などのGPUプラットフォームが列挙されればOK。
 4. `.venv-bench` を作った後（[env/12](12_inference_envs.md)）、OpenVINO から `GPU` が見えることを確認する。
@@ -190,7 +192,7 @@ sched_setaffinity(0, 元のaffinity)          # 戻す
 
 ## 9. 完了条件（DoD）
 
-- [ ] Ubuntu 24.04のWSLで `free -g` の total が約23GB
+- [ ] Ubuntu 22.04のWSLで `free -g` の total が約23GB
 - [ ] `clinfo -l` でIntel GPUが列挙される
 - [ ] OpenVINO のデバイス一覧が `CPU` と `GPU` の両方を表示する（5節 Step 3。[env/12](12_inference_envs.md) の後）
 - [ ] vCPUの推定実験の結果（図と表）があり、「WSL内でP/E固定ができるか」の結論がメモに書かれている

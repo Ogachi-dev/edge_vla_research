@@ -15,20 +15,21 @@
 
 - SDFの仕様：<http://sdformat.org/spec>（world、model、link、collision の `surface/contact/collide_bitmask`、sensor）
 - URDFの `<gazebo>` 拡張と、固定関節の統合（lumping）：<http://sdformat.org/tutorials?tut=sdformat_urdf_extensions>
-- Gazeboのセンサ：<https://gazebosim.org/docs/harmonic/sensors/>
+- Gazeboのセンサ：<https://gazebosim.org/docs/fortress/sensors/>
 - DetachableJoint：<https://gazebosim.org/api/sim/8/detachablejoints.html>
-- ros_gz_bridge のYAML形式：<https://github.com/gazebosim/ros_gz/tree/jazzy/ros_gz_bridge>
+- ros_gz_bridge のYAML形式：<https://github.com/gazebosim/ros_gz/tree/humble/ros_gz_bridge>
 
 ### 2.1 調査で確認した事実
 
 | 対象 | 事実 |
 | --- | --- |
 | SO-101のグリッパ | 固定側の爪は `gripper` リンクのメッシュの一部。可動側の爪が `jaw` リンク（関節 "6"、可動範囲 −0.1745〜1.745 rad） |
-| DetachableJoint（gz-sim8のソース） | パラメータは `parent_link`、`child_model`、`child_link`、`attach_topic`、`detach_topic`、`output_topic`、`suppress_child_warning`。状態は `"attached"` / `"detached"` の文字列を出す。**起動時は接続済み**。再接続は**その時点の相対姿勢のまま**固定する |
+| DetachableJoint（gz-sim8 と Fortress＝ign-gazebo6 のソース） | パラメータは `parent_link`、`child_model`、`child_link`、`attach_topic`、`detach_topic`、`output_topic`、`suppress_child_warning`。状態は `"attached"` / `"detached"` の文字列を出す。**起動時は接続済み**。再接続は**その時点の相対姿勢のまま**固定する |
 | DARTの制約 | 接続された初期状態で、親と子が衝突していてはいけない。接触中の再接続はサポートされない |
-| UserCommands（gz-sim8） | `/world/<w>/set_pose`、`set_pose_vector`、`light_config`、`visual_config`、`material_color`、`enable_collision`、`disable_collision` などのサービスとトピックがある |
+| UserCommands（gz-sim8、Fortress も同じ） | `/world/<w>/set_pose`、`set_pose_vector`、`light_config`、`visual_config`、`material_color`、`enable_collision`、`disable_collision` などのサービスとトピックがある |
 | PosePublisher | `publish_model_pose`、`publish_link_pose`、`use_pose_vector_msg`、`update_frequency`、`topic`。既定のトピックは `<スコープ名>/pose` |
-| ros_gz_bridge（jazzy） | `ControlWorld`、`SetEntityPose`、`SpawnEntity`、`DeleteEntity` のサービスをbridgeできる |
+| ros_gz_bridge（humble、0.244.17以降） | `ControlWorld`、`SetEntityPose`、`SpawnEntity`、`DeleteEntity` のサービスをbridgeできる（`SetEntityPose` などは 0.244.17 で humble に入った。apt の版を `dpkg -l ros-humble-ros-gz-bridge` で確かめる） |
+| Fortress での名前 | SDF の `gz-sim-*-system` と `gz::sim::systems::*` は Fortress でもそのまま読める（ファイル名の読み替えとクラス名の別名がある）。CLI は `ign gazebo` / `ign topic` / `ign service` / `ign sdf` |
 
 ## 3. 成果物
 
@@ -220,13 +221,13 @@ ls $(ros2 pkg prefix evla_sim)/share/evla_sim/
 ```bash
 python3 ros2_ws/src/evla_sim/scripts/render_world.py --seed 0 --out /tmp/evla_world_0.sdf
 python3 ros2_ws/src/evla_sim/scripts/render_world.py --seed 1 --out /tmp/evla_world_1.sdf
-gz sdf -k /tmp/evla_world_0.sdf && diff /tmp/evla_world_0.sdf /tmp/evla_world_1.sdf | head
-gz sim /tmp/evla_world_0.sdf                    # 目で見る（ロボットはまだいない）
+ign sdf -k /tmp/evla_world_0.sdf && diff /tmp/evla_world_0.sdf /tmp/evla_world_1.sdf | head
+ign gazebo /tmp/evla_world_0.sdf                # 目で見る（ロボットはまだいない）
 ```
 
 **確かめる**
 
-- [ ] `gz sdf -k` が `Valid.` を出す
+- [ ] `ign sdf -k` が `Valid.` を出す
 - [ ] seed 0 と 1 で、光の強さ・机の色・キューブの色・上方カメラの位置だけが違う
 - [ ] Gazebo で、机・箱（底と4枚の壁）・キューブ・上方カメラが見える
 
@@ -256,7 +257,7 @@ xacro $(ros2 pkg prefix lerobot_description)/share/lerobot_description/urdf/so10
 cd ros2_ws && colcon build --symlink-install --packages-select evla_sim && cd .. && source scripts/ros_env.sh
 xacro $(ros2 pkg prefix evla_sim)/share/evla_sim/urdf/so101_evla.urdf.xacro > /tmp/so101.urdf
 check_urdf /tmp/so101.urdf | head -20
-gz sdf -p /tmp/so101.urdf | grep -n "wrist_camera\|tcp"
+ign sdf -p /tmp/so101.urdf | grep -n "wrist_camera\|tcp"
 ```
 
 - [ ] `check_urdf` がエラーなしでリンクの木を表示し、`tcp` と `wrist_camera_link` が `gripper` の下にある
@@ -306,7 +307,7 @@ ros2 run tf2_ros tf2_echo tcp jaw              # 閉じた状態で、爪の先�
 ### Step 6：衝突マスクを確かめる（`TODO(you)`、1〜2時間）
 
 1. URDF の `<gazebo reference="gripper">` で、collision の `collide_bitmask` を設定できるか試す。
-2. `gz sdf -p /tmp/so101.urdf | grep -n collide_bitmask` で、SDF に入っているか確認する。
+2. `ign sdf -p /tmp/so101.urdf | grep -n collide_bitmask` で、SDF に入っているか確認する。
 3. 入らない場合は、SDF に変換してから編集する方式（`render_world.py` で SDF を後処理する）に切り替える。
 
 - [ ] グリッパを開いた状態でキューブの真上から降ろすと、**爪がキューブをすり抜け、キューブは机の上に残る**
@@ -318,7 +319,7 @@ ros2 run tf2_ros tf2_echo tcp jaw              # 閉じた状態で、爪の先�
 ros2 run rqt_image_view rqt_image_view          # 2つの画像を見る
 ros2 topic hz /camera/top/image                  # sim 時刻で 30Hz
 ros2 topic echo --once /camera/top/camera_info | grep -A1 "^k:"
-gz topic -e -t /stats -n 3 | grep real_time_factor
+ign topic -e -t /stats -n 3 | grep real_time_factor
 ```
 
 - [ ] 両カメラの画像が見え、手首カメラの向きが自然（`TODO(you)`：実機の取り付け位置に近い値を `wrist_camera_joint` に書く）
@@ -376,7 +377,7 @@ ros2 service call /world/evla/control ros_gz_interfaces/srv/ControlWorld "{world
 
 <details><summary>L2：使うツール</summary>
 
-`trimesh.load(path)`、`mesh.apply_transform(T)`、`tf_transformations` 相当の行列計算（`scipy.spatial.transform.Rotation.from_euler("xyz", rpy)`）、`gz sdf -p`（URDF→SDFの変換確認）、`gz topic -e -t /grasp/state`、`gz service -s /world/evla/set_pose --reqtype gz.msgs.Pose --reptype gz.msgs.Boolean --req 'name: "cube", position: {x: 0.2, y: 0, z: 0.02}'`
+`trimesh.load(path)`、`mesh.apply_transform(T)`、`tf_transformations` 相当の行列計算（`scipy.spatial.transform.Rotation.from_euler("xyz", rpy)`）、`ign sdf -p`（URDF→SDFの変換確認）、`ign topic -e -t /grasp/state`、`ign service -s /world/evla/set_pose --reqtype ignition.msgs.Pose --reptype ignition.msgs.Boolean --timeout 1000 --req 'name: "cube", position: {x: 0.2, y: 0, z: 0.02}'`
 </details>
 
 <details><summary>L3：render_world.py の流れ</summary>

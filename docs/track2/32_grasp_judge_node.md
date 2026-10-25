@@ -16,7 +16,7 @@
 
 - 剛体変換（同次変換行列、`T_a_b` の記法、逆変換、合成）
 - 回転の表現（回転行列、クォータニオン、オイラー角）と、角度の折り返し（wrap）
-- tf2（Python）：<https://docs.ros.org/en/jazzy/Tutorials/Intermediate/Tf2/Writing-A-Tf2-Listener-Py.html>
+- tf2（Python）：<https://docs.ros.org/en/humble/Tutorials/Intermediate/Tf2/Writing-A-Tf2-Listener-Py.html>
 - 31章で決めたTCP座標系の軸の規約（例：Z＝接近方向、Y＝爪の開閉方向）
 
 ### 2.1 記法
@@ -35,7 +35,7 @@
 | `ros2_ws/src/evla_nodes/evla_nodes/grasp_judge_node.py` | ROSノード（I/Oだけ） |
 | `ros2_ws/src/evla_sim/config/grasp.yaml` | 閾値（ノードのパラメータ） |
 
-**`evla.grasp` はNumPy 1.26でも動くコードにする**（ROSのプロセスから import するため。[01](../01_repository_design.md)）。
+**`evla.grasp` はPython 3.10・NumPy 1.21でも動くコードにする**（ROSのプロセスから import するため。[01](../01_repository_design.md)）。
 
 ## 4. インタフェース仕様
 

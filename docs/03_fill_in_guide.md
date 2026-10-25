@@ -67,9 +67,9 @@ diff <(sed 's/  #.*//' answers/$f) <(sed 's/  #.*//' $f)
 | --- | --- | --- |
 | `src/evla/` のうち、ROS・モデル不要の部分（common、grasp、planning、dataset、ipc、sim の executor、analysis、sweep） | `.venv-bench`（D1 から） | `pytest`（4節の表） |
 | モデルが必要な部分（torch / ov / vlacpp の Policy、LIBERO） | `.venv-bench`＋モデル | 章の完了条件（スモークテスト、一致の表） |
-| ROS ノード（`ros2_ws/src/evla_nodes`）と Gazebo の設定（`evla_sim`） | Ubuntu 24.04＋ROS 2 Jazzy | `colcon build` → launch → 章の完了条件 |
+| ROS ノード（`ros2_ws/src/evla_nodes`）と Gazebo の設定（`evla_sim`） | Ubuntu 22.04＋ROS 2 Humble＋Gazebo Fortress | `colcon build` → launch → 章の完了条件 |
 
-ROS ノードは `evla`（`src/evla`）を import します。ROS 側からは `source scripts/ros_env.sh` で `PYTHONPATH` に `src/` を通してください（Ubuntu 24.04 のシステム Python には `pip install` できないため）。
+ROS ノードは `evla`（`src/evla`）を import します。ROS 側からは `source scripts/ros_env.sh` で `PYTHONPATH` に `src/` を通してください（システムの Python に `pip install` すると apt の版と混ざるため）。`colcon build` も、venv を有効にしていないシェルで実行します（venv の Python を CMake が拾うと `catkin_pkg` が見つからずに失敗する）。
 
 ## 4. 進める順番と、各章の穴
 

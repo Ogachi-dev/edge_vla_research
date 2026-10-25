@@ -17,14 +17,14 @@
 - ZeroMQガイド：<https://zguide.zeromq.org/>（1章：REQ/REP、2章：マルチパート、ゼロコピー、4章：Lazy Pirate）
 - pyzmqのゼロコピー送信：<https://pyzmq.readthedocs.io/en/latest/howto/serialization.html>
 - msgpack：<https://github.com/msgpack/msgpack-python>
-- JointTrajectoryControllerの軌道の置き換え：<https://control.ros.org/jazzy/doc/ros2_controllers/joint_trajectory_controller/doc/trajectory.html>
+- JointTrajectoryControllerの軌道の置き換え：<https://control.ros.org/humble/doc/ros2_controllers/joint_trajectory_controller/doc/trajectory.html>
 - 27章のexecutor（同期 / 非同期、古い行動の破棄）
 
 ## 3. 成果物
 
 | パス | 役割 |
 | --- | --- |
-| `src/evla/ipc/protocol.py` | メッセージの定義とエンコード（**NumPy 1.26でも2でも動く**こと） |
+| `src/evla/ipc/protocol.py` | メッセージの定義とエンコード（**NumPy 1.21でも2でも動く**こと） |
 | `src/evla/ipc/client.py` | `InferenceClient`（タイムアウトと再接続つき） |
 | `src/evla/ipc/server.py` | `InferenceServer`：22章の `Policy` を包む（`.venv-bench` で動かす） |
 | `scripts/serve_policy.py` | サーバーの起動CLI（`--config configs/policy/so101_ov_cpu.yaml` など。SO-101 用の設定ファイルは36章 Step 5 で自分で作る） |
@@ -129,7 +129,7 @@ flowchart LR
 
 ## 5. ハンズオン
 
-各 Step は「**読む → 埋める → 動かす → 確かめる**」の1サイクルです。この章の要は**プロセスの分離**です。推論（`.venv-bench`、NumPy 2）と ROS ノード（システム Python、NumPy 1.26）は同じプロセスに入れられないので、ZeroMQ でつなぎます（[01](../01_repository_design.md)）。
+各 Step は「**読む → 埋める → 動かす → 確かめる**」の1サイクルです。この章の要は**プロセスの分離**です。推論（`.venv-bench`、NumPy 2）と ROS ノード（システム Python 3.10、NumPy 1.21）は同じプロセスに入れられないので、ZeroMQ でつなぎます（[01](../01_repository_design.md)）。
 
 ### Step 0：準備（5分）
 
@@ -143,7 +143,7 @@ pytest tests/ipc -q          # まだ失敗する
 
 ### Step 1：プロトコル ― `protocol.py`（穴①〜⑥、1.5時間）
 
-**読む**：4.1節のメッセージの形（ヘッダ＝msgpack の辞書、配列＝生のバイト列のフレーム）。なぜ pickle を使わないか（NumPy 1.26 と 2 の間で互換性がない／安全でない）を確認する。
+**読む**：4.1節のメッセージの形（ヘッダ＝msgpack の辞書、配列＝生のバイト列のフレーム）。なぜ pickle を使わないか（NumPy 1.21 と 2 の間で互換性がない／安全でない）を確認する。
 
 **埋める**
 

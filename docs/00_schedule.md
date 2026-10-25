@@ -18,7 +18,7 @@
 | --- | --- | --- |
 | [ ] リポジトリの骨組み、`pyproject.toml`、`src/evla/common/` | [01](01_repository_design.md) | 3h |
 | [ ] 規約を読む | [02](02_best_practices.md) | 1h |
-| [ ] `.wslconfig`、Ubuntu 24.04のディストロ追加 | [env/10](env/10_wsl2_and_igpu.md) Step 1〜2 | 1h |
+| [ ] `.wslconfig`、使うディストロ（Ubuntu 22.04）の確認 | [env/10](env/10_wsl2_and_igpu.md) Step 1〜2 | 1h |
 
 ## 3. 前半（D1〜D5）：計測基盤とデータ
 
@@ -29,7 +29,7 @@
 | 1 | [ ] ★ iGPUの認識：`/dev/dxg` → `clinfo` → OpenVINOのデバイス一覧 | [env/10](env/10_wsl2_and_igpu.md) Step 3 | 2h |
 | 1 | [ ] `.venv-bench` を作る（CPU版torch、lerobot、openvino、physicalai） | [env/12](env/12_inference_envs.md) Step 1 | 2h |
 | 1 | [ ] vCPUのP/Eコア推定実験 | [env/10](env/10_wsl2_and_igpu.md) Step 4 | 1.5h |
-| 2 | [ ] ★ ROS 2 Jazzy＋Gazebo Harmonic、WSLgの描画確認 | [env/11](env/11_ros2_gazebo.md) Step 1〜2 | 2h |
+| 2 | [ ] ★ ROS 2 Humble＋Gazebo Fortress、WSLgの描画確認 | [env/11](env/11_ros2_gazebo.md) Step 1〜2 | 2h |
 | 2 | [ ] ★ lerobot_wsをビルドし、SO-101をGazeboとMoveItで動かす | [env/11](env/11_ros2_gazebo.md) Step 3〜4 | 2h |
 | 2 | [ ] 関節の対応と符号の表 | [env/11](env/11_ros2_gazebo.md) Step 5 | 1h |
 | 🌙 | vla.cpp CPUのビルド（時間がかかれば夜に） | [env/12](env/12_inference_envs.md) Step 3 | |

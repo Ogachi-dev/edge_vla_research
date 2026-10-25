@@ -9,7 +9,7 @@ import platform
 import socket
 import subprocess
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from importlib import metadata
 from pathlib import Path
 
@@ -93,7 +93,7 @@ def capture_env() -> EnvSnapshot:
         packages=_packages(),
         thread_env={k: os.environ[k] for k in THREAD_ENV if k in os.environ},
         ov_devices=_ov_devices(),
-        timestamp_utc=datetime.now(UTC).isoformat(),
+        timestamp_utc=datetime.now(timezone.utc).isoformat(),
     )
 
 

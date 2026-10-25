@@ -147,12 +147,12 @@ cd -
 - [ ] `vla-bench` が Markdown の表（ステージごとの時間）を出す。その表をメモに貼る
 - [ ] `git -C third_party/vla.cpp rev-parse HEAD` のコミットをメモに残す
 
-動作確認だけなら、ビルド済みバイナリ（`linux-x86_64-cpu`、AVX2が必要）を使ってもよい。ただし本番の計測では、**自分でビルドしたもの**（`GGML_NATIVE=ON` でこのCPU向けに最適化される）を使う。
+ビルド済みバイナリ（`linux-x86_64-cpu`）は Ubuntu 24.04 以降の glibc を要求するので、この端末（22.04、glibc 2.35）では使えない。**自分でビルドしたもの**（`GGML_NATIVE=ON` でこのCPU向けに最適化される）を使う。
 
 ### Step 4：vla.cpp SYCLビルド（2〜3時間。うまくいかなければ打ち切る）
 
 1. compute runtime が入っていることを確認する（[env/10](10_wsl2_and_igpu.md)）。
-2. oneAPIを入れる。Deep Learning Essentials で足りる（DPC++、oneMKL、oneDNN）。
+2. oneAPIを入れる。Deep Learning Essentials で足りる（DPC++、oneMKL、oneDNN）。oneAPI 2026.x は Ubuntu 22.04 に対応していないので、**2025.x を使う**（**【要確認】** 2025.x のどの版で vla.cpp の SYCL がビルドできるか。下の落とし穴の表の 2025.3 が第一候補）。
 3. `source /opt/intel/oneapi/setvars.sh` → `sycl-ls` を実行する。
 4. ビルドする（**ビルドディレクトリは新しく作る**。コンパイラを途中で替えたディレクトリは壊れる）。
 
@@ -225,7 +225,7 @@ python -c "from evla.policy._proto import vla_pb2; print([m for m in dir(vla_pb2
 | --- | --- | --- |
 | torch が CUDA 版になり数GBダウンロードされる | PyPIのLinux向けtorchはCUDA同梱 | CPU用のindexを指定する（Step 1） |
 | `lerobot` の import で NumPy のエラー | ROSのシェルでvenvを使った | シェルを分ける |
-| SYCL の `sycl-ls` が segfault する | oneAPI 2026.1 の Level Zero アダプタと、Ubuntu 24.04 の `libze1` 1.16 の組み合わせ（vla.cpp の既知の問題） | `UR_ADAPTERS_FORCE_LOAD` でOpenCLアダプタを強制する。または oneAPI 2025.3 を使う |
+| SYCL の `sycl-ls` が segfault する | oneAPI 2026.1 の Level Zero アダプタと、Ubuntu 24.04 の `libze1` 1.16 の組み合わせ（vla.cpp の既知の問題。22.04 で 2025.x を使う場合も、`libze1` が古いと同じことが起きうる） | `UR_ADAPTERS_FORCE_LOAD` でOpenCLアダプタを強制する。または oneAPI 2025.3 を使う |
 | SYCL で `could not create a memory object` | VMMプールとoneDNNの組み合わせ | `GGML_SYCL_ENABLE_VMM=0`（vla.cppの既定）のままにする |
 | SYCL / OV の初回推論が極端に遅い | グラフのコンパイル（OVのGPUでは数十秒〜数分） | ウォームアップで除外する。クライアントのタイムアウトを長くする |
 | OV バックエンドの2回目の起動から行動がおかしい | **`GGML_OPENVINO_CACHE_DIR` を設定すると誤った行動を返す**（vla.cpp の既知の問題） | 設定しない |

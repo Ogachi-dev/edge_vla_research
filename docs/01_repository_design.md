@@ -15,7 +15,7 @@
 ## 2. 前提知識・事前に読む資料
 
 - uv：<https://docs.astral.sh/uv/>（`uv venv`、`uv pip`、`uv run`、`pyproject.toml` の依存定義）
-- colconワークスペース：<https://docs.ros.org/en/jazzy/Tutorials/Beginner-Client-Libraries/Colcon-Tutorial.html>
+- colconワークスペース：<https://docs.ros.org/en/humble/Tutorials/Beginner-Client-Libraries/Colcon-Tutorial.html>
 - Python パッケージの `src` レイアウト：<https://packaging.python.org/en/latest/discussions/src-layout-vs-flat-layout/>
 
 ## 3. 成果物（最終的なディレクトリ構成）
@@ -52,7 +52,7 @@ edge_vla_research/
 
 - 把持判定や統計処理などの**ロジックを、ROSを起動せずにpytestで検証できる**。
 - ROS側（`evla_nodes`）は「メッセージを受けて `evla` の関数を呼び、結果をpublishする」だけの薄いラッパにする。
-- ただし `evla` のうち ROS 側から import する部分（`grasp/`、`ipc/protocol.py`）は、**NumPy 1.26でも動くコードに限定する**（後述の依存制約）。
+- ただし `evla` のうち ROS 側から import する部分（`common/`、`grasp/`、`planning/`、`dataset/` の一部、`ipc/protocol.py`）は、**Python 3.10・NumPy 1.21でも動くコードに限定する**（後述の依存制約）。`def f[T]` などの3.12の構文や `datetime.UTC` は使わない（`pyproject.toml` の ruff の `target-version = "py310"` で検出する）。
 
 ## 4. インタフェース仕様
 
@@ -60,9 +60,9 @@ edge_vla_research/
 
 ```mermaid
 flowchart LR
-  subgraph SYS["システムPython 3.12（apt）"]
-    ROS["ROS 2 Jazzy ノード群<br/>rclpy・numpy 1.26・pyzmq・msgpack"]
-    GZ["Gazebo Harmonic"]
+  subgraph SYS["システムPython 3.10（apt）"]
+    ROS["ROS 2 Humble ノード群<br/>rclpy・numpy 1.21・pyzmq・msgpack"]
+    GZ["Gazebo Fortress"]
   end
   subgraph V1[".venv-bench（uv, Python 3.12）"]
     BENCH["トラック1：LIBERO・ベンチ<br/>lerobot[smolvla,libero]・openvino・physicalai"]
@@ -82,8 +82,8 @@ flowchart LR
 
 | 環境 | Python | 主な依存 | 用途 |
 | --- | --- | --- | --- |
-| システム（ROS） | 3.12（Ubuntu 24.04のapt） | rclpy、numpy 1.26、`python3-zmq`、`python3-msgpack` | ROSノード（判定、記録、ポリシーノード） |
-| `.venv-bench` | 3.12（uv） | `lerobot[smolvla,libero]`、`openvino`、`nncf`、`physicalai`、`pyzmq`、`protobuf`、`psutil`、`pandas`、`matplotlib` | トラック1全般、推論サーバー、データ変換 |
+| システム（ROS） | 3.10（Ubuntu 22.04のapt） | rclpy、numpy 1.21、`python3-zmq`、`python3-msgpack` | ROSノード（判定、記録、ポリシーノード） |
+| `.venv-bench` | 3.12（uvが入れたPython。システムの3.10とは別） | `lerobot[smolvla,libero]`、`openvino`、`nncf`、`physicalai`、`pyzmq`、`protobuf`、`psutil`、`pandas`、`matplotlib` | トラック1全般、推論サーバー、データ変換 |
 | `.venv-export` | 3.12（uv） | `physicalai-train[nncf]`（`lerobot==0.6.0` を固定で要求） | 学習済みSmolVLAのOpenVINO IRへの書き出し |
 | vla.cpp | なし（C++） | libzmq、protobuf、（oneAPI / OpenVINO） | GGUF推論サーバー、`vla-bench` |
 | 学習機（RTX PRO 6000、RAM 64GB のサーバー） | 3.12 | `lerobot[smolvla]`（CUDA版torch） | ファインチューニング |
@@ -91,7 +91,7 @@ flowchart LR
 **依存の衝突は実在する**（調査で確認済み）。
 
 - LeRobot 0.6系は `numpy>=2.0`、`requires-python>=3.12` を要求する。
-- ROS 2 Jazzy の apt パッケージは Ubuntu 24.04 の NumPy 1.26 でビルドされている。venv に NumPy 2 を入れて rclpy を import すると、C拡張のABI不一致で落ちることがある。
+- ROS 2 Humble の apt パッケージは Ubuntu 22.04 の Python 3.10・NumPy 1.21 でビルドされている。3.12 の venv からは rclpy を import できない。また `~/.local` に `pip install --user` した NumPy 2 が先に読まれると、cv_bridge などの C 拡張が ABI の不一致で落ちる（`scripts/ros_env.sh` が `PYTHONNOUSERSITE=1` で防ぐ）。
 - `physicalai-train 0.3.0` は `lerobot[dataset]==0.6.0` を固定で要求するため、最新のLeRobotと同じ venv に入れると解決に失敗しやすい。
 
 → **ROSノードの中では lerobot / torch / openvino を import しない**。これを全体のルールにする。
@@ -169,7 +169,7 @@ def dump_config(cfg: Any, path: Path) -> None:
 | エピソードごとの結果 | Parquet | 同上 |
 | 設定・要約 | YAML / JSON | 人間が読める |
 | 把持イベントのログ | JSON Lines（`.jsonl`） | 追記しやすく、途中で落ちても前の行が残る |
-| 生エピソード（トラック2） | ディレクトリ＋PNG＋`.npz`＋JSON | ROS側（NumPy 1.26）で書ける。変換は別プロセス |
+| 生エピソード（トラック2） | ディレクトリ＋PNG＋`.npz`＋JSON | ROS側（NumPy 1.21）で書ける。変換は別プロセス |
 
 ## 5. ハンズオン
 

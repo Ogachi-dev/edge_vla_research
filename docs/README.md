@@ -28,8 +28,9 @@
 | | [01_repository_design](01_repository_design.md) | リポジトリ構成、プロセスとvenvの分離、データ形式 |
 | | [02_best_practices](02_best_practices.md) | 実装・テスト・計測の作法 |
 | | [03_fill_in_guide](03_fill_in_guide.md) | 穴埋めの共通ルールと、章ごとの穴の一覧 |
+| | [decisions](decisions.md) | 設計判断と計画書からの変更の記録（検証端末の環境など） |
 | 環境 | [env/10_wsl2_and_igpu](env/10_wsl2_and_igpu.md) | WSL2の設定、iGPU（Iris Xe）、CPUトポロジの罠 |
-| | [env/11_ros2_gazebo](env/11_ros2_gazebo.md) | Ubuntu 24.04、ROS 2 Jazzy、Gazebo Harmonic、lerobot_ws |
+| | [env/11_ros2_gazebo](env/11_ros2_gazebo.md) | Ubuntu 22.04、ROS 2 Humble、Gazebo Fortress、lerobot_ws |
 | | [env/12_inference_envs](env/12_inference_envs.md) | 推論用venv（uv）、vla.cppのビルド（CPU / SYCL / OpenVINO） |
 | トラック1 | [track1/20_overview](track1/20_overview.md) | 全体像、測定モードA/B/C |
 | | [track1/21_libero_setup](track1/21_libero_setup.md) | LIBEROの導入とヘッドレス描画 |
@@ -86,11 +87,11 @@
 
 1. **WSL2ではP/Eコアを区別できない**：WSL2のゲストからは「8コア×2スレッド」の均質なCPUに見え、`/sys/devices/cpu_core` も存在しない（この端末で確認済み）。WSL内の `taskset` ではPコアだけに固定できない。→ [env/10](env/10_wsl2_and_igpu.md#7-落とし穴)、[26](track1/26_bench_mode_a.md)
 2. **WSL2に見えているメモリは15GB**：32GB搭載だが、`.wslconfig` の既定でWSLには約半分しか割り当てられない。→ [env/10](env/10_wsl2_and_igpu.md)
-3. **LeRobotはPython 3.12以上が必須**（v0.6系）。現在のUbuntu 22.04（Python 3.10）では動かないので、Ubuntu 24.04に統一する。→ [env/11](env/11_ros2_gazebo.md)、[env/12](env/12_inference_envs.md)
+3. **LeRobotはPython 3.12以上が必須**（v0.6系）。Ubuntu 22.04のシステムPythonは3.10なので、`.venv-bench` は uv が入れた Python 3.12 で作る。ROS（Humble）はシステムの3.10で動かし、両者はプロセスを分けてつなぐ（**【計画書との差分】** 計画書は24.04への統一。[decisions](decisions.md)）。→ [env/10](env/10_wsl2_and_igpu.md)、[env/12](env/12_inference_envs.md)
 4. **OpenVINO版SmolVLAの配布元が変わった**：計画書の `modelapi/smolvla-libero-fp16-ov-catalog` は現在アクセスできない（401）。代わりに `OpenVINO/smolvla-libero-{fp16,bf16,w8a16}-ov` が公開されている（Physical AIフレームワーク `physicalai` 向け）。→ [24](track1/24_runtime_openvino.md)
 5. **iGPUを使う経路は3つある**：OpenVINO（physicalai）、vla.cpp＋SYCL、vla.cpp＋OpenVINOバックエンド（`GGML_OPENVINO_DEVICE=GPU`）。→ [25](track1/25_runtime_vlacpp.md)
 6. **CPU推論は1回あたり約2秒かかる見込み**：vla.cppの公開値では、デスクトップCPU（i7-14700F）でSmolVLA（2視点・512px）のp50は約1.7秒で、うち約1.1秒がビジョン部。i7-1360Pはさらに遅いと見込む。チャンク50・30Hzの1チャンク分（1.67秒）より長いので、**非同期実行と解像度・視点数の掃引が研究の核心**になる。→ [20](track1/20_overview.md)
 7. **lerobot_wsのSO-101は関節名が "1"〜"6"**：公開データの `shoulder_pan.pos` などとは名前が違う。コントローラの `update_rate` は10Hzで、TCPリンクもない。腕は5自由度なので、6自由度の姿勢を指定するIKは解けないことが多い。→ [31](track2/31_gazebo_scene.md)、[33](track2/33_moveit_demo_gen.md)
 8. **公開SO-101データのグリッパは0〜100の正規化値**：計画書は「度単位で統一」としているが、公開データのグリッパ列は度ではない（統計値0.9〜70.2）。→ [34](track2/34_episode_recorder.md)
-9. **ROS 2 Jazzy（NumPy 1.26）とLeRobot（NumPy 2以上が必須）は同じプロセスに同居できない**。記録ノードは生データを書き出すだけにし、LeRobotDatasetへの変換は別venvのスクリプトで行う。→ [34](track2/34_episode_recorder.md)
+9. **ROS 2 Humble（Python 3.10・NumPy 1.21）とLeRobot（Python 3.12・NumPy 2以上が必須）は同じプロセスに同居できない**。記録ノードは生データを書き出すだけにし、LeRobotDatasetへの変換は別venvのスクリプトで行う。→ [34](track2/34_episode_recorder.md)
 10. **WSL2ではRAPLが見えない**（`/sys/class/powercap` がない）。電力・温度・クロックはWindows側で測る。→ [40](common/40_metrics_measurement.md)

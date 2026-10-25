@@ -12,8 +12,8 @@
 ## 2. 前提知識・事前に読む資料
 
 - [env/11](../env/11_ros2_gazebo.md) の lerobot_ws の事実（関節名 "1"〜"6"、`update_rate` 10Hz、5自由度）
-- ros_gz_bridge：<https://github.com/gazebosim/ros_gz/tree/jazzy/ros_gz_bridge>
-- Gazeboの時間制御（WorldControl）：<https://gazebosim.org/api/sim/8/>（`/world/<name>/control` サービス）
+- ros_gz_bridge：<https://github.com/gazebosim/ros_gz/tree/humble/ros_gz_bridge>
+- Gazeboの時間制御（WorldControl）：<https://gazebosim.org/api/gazebo/6/>（`/world/<name>/control` サービス）
 
 ## 3. 成果物（トラック2全体）
 
@@ -34,7 +34,7 @@
 
 ```mermaid
 flowchart LR
-  subgraph GZ["Gazebo Harmonic（world: evla_pickplace）"]
+  subgraph GZ["Gazebo Fortress（world: evla_pickplace）"]
     W["物理・センサ<br/>DetachableJoint"]
   end
   BR["ros_gz_bridge<br/>（YAML）"]
@@ -71,7 +71,7 @@ flowchart LR
 
 | プロセス | Python | 備考 |
 | --- | --- | --- |
-| `gz sim`、bridge、controller、move_group、自作ノード | システム（ROS） | lerobot / torch / transformers は import しない |
+| `ign gazebo`、bridge、controller、move_group、自作ノード | システム（ROS） | lerobot / torch / transformers は import しない |
 | 推論サーバー `evla.ipc.server` | `.venv-bench` | 22章の `Policy` をそのまま使う（torch / ov / vlacpp） |
 | `vla-server` | なし（C++） | vlacpp を使う場合だけ。推論サーバーの裏で動く |
 | 生エピソード → LeRobotDataset の変換 | `.venv-bench` | オフラインのバッチ処理（34章） |
@@ -147,14 +147,14 @@ ROS ノードの章（31・32・33・34・37・38）は、**ROS なしで確か�
 
 <details><summary>L2：使うコマンド</summary>
 
-`ros2 node list`、`ros2 topic info -v <topic>`（QoSの不一致を確認）、`ros2 service list -t`、`gz topic -l`、`gz service -l`、`rqt_graph`
+`ros2 node list`、`ros2 topic info -v <topic>`（QoSの不一致を確認）、`ros2 service list -t`、`ign topic -l`、`ign service -l`、`rqt_graph`
 </details>
 
 <details><summary>L3：sim.launch.py の構成（疑似コード）</summary>
 
 ```
 DeclareLaunchArgument("world", default=evla_sim/worlds/evla_pickplace.sdf)
-SetEnvironmentVariable(GZ_SIM_RESOURCE_PATH, [lerobot_description の親, evla_sim/models])
+SetEnvironmentVariable(GZ_SIM_RESOURCE_PATH, [lerobot_description の親, evla_sim/models])   # Fortress は IGN_GAZEBO_RESOURCE_PATH も見る
 IncludeLaunchDescription(ros_gz_sim/gz_sim.launch.py, gz_args="-r -v 3 <world>")   # 生成時は -r を外して停止状態で開始
 Node(robot_state_publisher, params={robot_description: xacro(evla_sim/urdf/so101_evla.urdf.xacro), use_sim_time: True})
 Node(ros_gz_sim create -topic robot_description -name so101)

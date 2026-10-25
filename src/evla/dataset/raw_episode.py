@@ -1,4 +1,4 @@
-"""生エピソードの書き込みと読み込み（ROS 側＝NumPy 1.26 でも動く）。docs/track2/34_episode_recorder.md 4.1
+"""生エピソードの書き込みと読み込み（ROS 側＝Python 3.10・NumPy 1.21 でも動く）。docs/track2/34_episode_recorder.md 4.1
 
 data/raw/<name>/ep_000123/
 ├── top/000000.png ...  wrist/000000.png ...

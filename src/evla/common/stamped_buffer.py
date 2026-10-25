@@ -9,9 +9,12 @@ from __future__ import annotations
 import bisect
 import threading
 from collections.abc import Callable
+from typing import Generic, TypeVar
+
+T = TypeVar("T")  # ROS 側の Python 3.10 でも動くよう、3.12 の class C[T] は使わない
 
 
-class StampedBuffer[T]:
+class StampedBuffer(Generic[T]):
     def __init__(self, maxlen: int = 128) -> None:
         self.maxlen = maxlen
         self._stamps: list[int] = []
