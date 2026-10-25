@@ -40,7 +40,7 @@ edge_vla_research/
 ├── third_party/                  # vla.cpp などの外部リポジトリ（git submodule か手動clone。.gitignore対象）
 ├── ros2_ws/
 │   └── src/
-│       ├── lerobot_ws/           # Ar-Ray-code/lerobot_ws（外部。変更はしない）
+│       ├── lerobot_ws/           # Ar-Ray-code/lerobot_ws（git submodule、sts_servo。変更はしない）
 │       ├── evla_sim/             # ament_cmake：world, model, launch, bridge YAML, URDFオーバーレイ
 │       └── evla_nodes/           # ament_python：grasp_judge, episode_runner, policy_node
 ├── results/                      # 実験結果（.gitignore対象。runs/<run_id>/ 単位）
