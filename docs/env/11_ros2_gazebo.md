@@ -57,13 +57,14 @@ lerobot_ws は Jazzy＋Harmonic 向けに書かれています。Humble＋Fortre
 | Gazebo起動 | `empty.sdf` を `-r` で起動し、`/clock` だけをbridgeする |
 
 ```bash
-# 起動順（READMEより）
+# 起動順（READMEより。この端末では2つ目が動かないので、Step 4 の手順を使う）
 ros2 launch lerobot_description so101_gazebo.launch.py
-ros2 launch lerobot_controller so101_follower_controller.launch.py   # 【要確認】READMEとファイル名が異なる
+ros2 launch lerobot_controller so101_follower_controller.launch.py
 ros2 launch lerobot_moveit so101_moveit.launch.py
 ```
 
-**【要確認】** READMEには `so101_controller.launch.py` とありますが、リポジトリにあるのは `so101_follower_controller.launch.py` です。`ros2 launch lerobot_controller <TAB>` で実際の名前を確認してください。
+- READMEには `so101_controller.launch.py` とありますが、リポジトリにあるのは `so101_follower_controller.launch.py` です。
+- **`so101_follower_controller.launch.py` は、シミュレーションでも `/follower/controller_manager` に接続しにいく**。Gazebo の `gz_ros2_control` は名前空間なしの `/controller_manager` を立てるので、spawner が `waiting for service /follower/controller_manager/list_controllers` のまま進まない（2026-10-26、この端末の Humble＋Fortress で確認）。lerobot_ws は変更しないので、spawner を名前空間なしで直接起動する（Step 4）。`evla_sim` の `sim.launch.py` は最初から名前空間なしで spawner を起動している。
 
 ### 4.2 `scripts/ros_env.sh`（リポジトリに用意済み）
 
@@ -94,7 +95,7 @@ export ROS_DOMAIN_ID=42                          # TODO(you): 他の機器と被
 ```bash
 sudo apt install -y \
   ros-humble-ros-gz ros-humble-gz-ros2-control ros-humble-ros2-controllers \
-  ros-humble-moveit ros-humble-moveit-py ros-humble-xacro \
+  ros-humble-moveit ros-humble-moveit-py ros-humble-xacro ros-humble-ros2controlcli \
   python3-zmq python3-msgpack python3-opencv
 ```
 
@@ -149,7 +150,20 @@ colcon build --symlink-install
 
 ### Step 4：起動確認（1時間）
 
-1. 3つのlaunchを順番に起動し、RVizのMotionPlanningパネルからplan＆executeを1回行う。
+1. 端末を3つ使い、順番に起動する（どの端末も `source scripts/ros_env.sh` してから）。コントローラは lerobot_ws の launch ではなく、spawner を直接起動する（4.1節）。
+
+```bash
+# 端末1：Gazebo と SO-101
+ros2 launch lerobot_description so101_gazebo.launch.py
+# 端末2：コントローラ（3つとも "Configured and activated" と出れば終わる）
+for c in joint_state_broadcaster arm_controller gripper_controller; do
+  ros2 run controller_manager spawner "$c"
+done
+# 端末3：MoveIt と RViz
+ros2 launch lerobot_moveit so101_moveit.launch.py
+```
+
+   RVizのMotionPlanningパネルからplan＆executeを1回行う。
 2. `ros2 topic hz /joint_states` を実行する（10Hz前後なら、コントローラの `update_rate` が効いている）。
 3. `ros2 control list_controllers` で3つのコントローラが `active` になっていることを確認する。
 4. Gazeboの統計を確認する：`ign topic -e -t /stats -n 1`（**【要確認】** world名を付けた `/world/empty/stats` の場合もある。`ign topic -l | grep stats` で探す）。
