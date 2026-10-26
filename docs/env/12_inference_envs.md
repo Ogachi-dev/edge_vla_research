@@ -178,12 +178,14 @@ cd -
 
 ### Step 5：vla.cpp OpenVINOバックエンド（1〜2時間）
 
-1. OpenVINO をアーカイブ版で `/opt/intel/openvino` に入れる（vla.cppの `scripts/install_ov.sh` も使える）。
-2. `source /opt/intel/openvino/setupvars.sh` を読んでからビルドする。
+1. OpenVINO をアーカイブ版で入れ、`/opt/intel/openvino` からリンクを張る（vla.cppの `scripts/install_ov.sh` も使える）。この端末では 2026.4.1 を `/opt/intel/openvino_2026.4.1` に置き、`sudo ln -s /opt/intel/openvino_2026.4.1 /opt/intel/openvino` とした。
+2. OpenCL のヘッダを入れる：`sudo apt-get install -y opencl-headers ocl-icd-opencl-dev`。OpenVINO の GPU 用のヘッダが `CL/cl2.hpp`（`opencl-clhpp-headers` に入っている）を読む。
+3. **oneAPI の `setvars.sh` を読んでいない新しい端末で**、`source /opt/intel/openvino/setupvars.sh` を読んでからビルドする。oneAPI の環境が残っていると、CMake が oneAPI の OpenCL を拾う（7節）。
 
 ```bash
 cd third_party/vla.cpp
 cmake -B build-ov -G Ninja -DCMAKE_BUILD_TYPE=Release -DGGML_OPENVINO=ON
+grep OpenCL_INCLUDE_DIR build-ov/CMakeCache.txt   # /usr/include なら正しい
 cmake --build build-ov -j"$(nproc)"
 GGML_OPENVINO_DEVICE=GPU ./build-ov/vla-bench -hf vrfai/smolvla-libero-gguf --images 2 --size 512 --markdown
 cd -
@@ -235,6 +237,7 @@ python -c "from evla.policy._proto import vla_pb2; print([m for m in dir(vla_pb2
 | SYCL の設定で、全ターゲットに `requires changing an RPATH ... not supported with the Ninja generator` | 前の設定の `CMAKE_EXECUTABLE_FORMAT=Unknown` が `CMakeCache.txt` に残っている | `rm -rf build-sycl` してから設定する |
 | `build-sycl` なのにバナーが `CPU` で、設定のログが `GNU 11.4.0` | 貼り付けで行が切れ、`-DGGML_SYCL=ON` などが cmake に渡っていない | `rm -rf build-sycl` し、cmake のコマンドを1行で貼る |
 | `vla-bench -hf` が `hf: not found` | Hugging Face の CLI がない | `.venv-bench` を有効にする（`hf` が入っている） |
+| OV 版のビルドで `fatal error: CL/cl2.hpp: No such file or directory` | OpenCL の C++ ヘッダがない。oneAPI を読んだシェルでは、CMake が oneAPI の OpenCL（`~/intel/oneapi/compiler/.../include`）を拾っていて、そこにも `cl2.hpp` はない | `opencl-headers ocl-icd-opencl-dev` を入れ、oneAPI を読まない端末で `rm -rf build-ov` してから設定する |
 | SYCL で `could not create a memory object` | VMMプールとoneDNNの組み合わせ | `GGML_SYCL_ENABLE_VMM=0`（vla.cppの既定）のままにする |
 | SYCL / OV の初回推論が極端に遅い | グラフのコンパイル（OVのGPUでは数十秒〜数分） | ウォームアップで除外する。クライアントのタイムアウトを長くする |
 | OV バックエンドの2回目の起動から行動がおかしい | **`GGML_OPENVINO_CACHE_DIR` を設定すると誤った行動を返す**（vla.cpp の既知の問題） | 設定しない |
