@@ -69,7 +69,7 @@ backend="${1:-cpu}"
 export VLA_CACHE="$HOME/.cache/vla"
 case "$backend" in
   cpu)  export VLA_BIN="$PWD/third_party/vla.cpp/build" ;;
-  sycl) source /opt/intel/oneapi/setvars.sh --force >/dev/null
+  sycl) source "$HOME/intel/oneapi/setvars.sh" --force >/dev/null   # oneAPI はホームに入れた（5節 Step 4）
         export VLA_BIN="$PWD/third_party/vla.cpp/build-sycl" ;;
   ov)   source /opt/intel/openvino/setupvars.sh
         export VLA_BIN="$PWD/third_party/vla.cpp/build-ov" ;;
@@ -152,23 +152,28 @@ cd -
 ### Step 4：vla.cpp SYCLビルド（2〜3時間。うまくいかなければ打ち切る）
 
 1. compute runtime が入っていることを確認する（[env/10](10_wsl2_and_igpu.md)）。
-2. oneAPIを入れる。Deep Learning Essentials で足りる（DPC++、oneMKL、oneDNN）。oneAPI 2026.x は Ubuntu 22.04 に対応していないので、**2025.x を使う**（**【要確認】** 2025.x のどの版で vla.cpp の SYCL がビルドできるか。下の落とし穴の表の 2025.3 が第一候補）。
-3. `source /opt/intel/oneapi/setvars.sh` → `sycl-ls` を実行する。
-4. ビルドする（**ビルドディレクトリは新しく作る**。コンパイラを途中で替えたディレクトリは壊れる）。
+2. oneAPI を入れる。DPC++、oneMKL、oneDNN が要る。oneAPI 2026.x は Ubuntu 22.04 に対応していないので、**2025.3 を使う**。この端末では、Base Toolkit 2025.3.1 のオフラインインストーラ（`intel-oneapi-base-toolkit-2025.3.1.36_offline.sh`）で `~/intel/oneapi` に入れ、`icpx` 2025.3.2 で動いた。
+3. `source ~/intel/oneapi/setvars.sh --force` → `sycl-ls` を実行する。
+4. ビルドする。
+   - **ビルドディレクトリは新しく作る**。コンパイラや oneAPI の版を替えたら `rm -rf build-sycl` してから設定する（古い設定が残ると壊れる。7節）
+   - **`-DGGML_SYCL_SUPPORT_LEVEL_ZERO_API=OFF` を付ける**。付けないと、`libze-dev`（Level Zero のヘッダ）が入っている環境では、起動時の `zesInit` で segfault する（7節）
+   - コマンドは1行ずつ貼る。行の途中で切れると、`-DGGML_SYCL=ON` が別のコマンドになり、**黙って CPU 版がビルドされる**
+   - `-hf` でモデルを落とすには `hf` コマンドが要る。`.venv-bench` を有効にしたシェルで実行する
 
 ```bash
 cd third_party/vla.cpp
-cmake -B build-sycl -G Ninja -DCMAKE_BUILD_TYPE=Release -DGGML_SYCL=ON \
-      -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx
+cmake -B build-sycl -G Ninja -DCMAKE_BUILD_TYPE=Release -DGGML_SYCL=ON -DGGML_SYCL_SUPPORT_LEVEL_ZERO_API=OFF -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx
 cmake --build build-sycl -j"$(nproc)"
 ./build-sycl/vla-bench -hf vrfai/smolvla-libero-gguf --images 2 --size 512 --markdown
 cd -
 ```
 
+設定のログに `The CXX compiler identification is IntelLLVM 2025.3...`、`GGML_SYCL_SUPPORT_LEVEL_ZERO_API OFF`、`Including SYCL backend` が出ることを確かめる。
+
 **確かめる**
 
 - [ ] `sycl-ls` に `[level_zero:gpu]` または `[opencl:gpu]` が出る
-- [ ] 起動時のバナーに `backend = SYCL (device 0: Intel(R) Iris(R) Xe ...)` と出る（`CPU` と出たら、GPUが見えていない）
+- [ ] 起動時のバナーに `backend = SYCL (device 0: Intel(R) Graphics [0xa7a0])` と出る（`CPU` と出たら、GPU が見えていないか、CPU 版をビルドしている）
 - [ ] 動かなかった場合も、エラーと試したことをメモに残して先へ進む（DoD はそれで満たせる）
 
 ### Step 5：vla.cpp OpenVINOバックエンド（1〜2時間）
@@ -226,6 +231,10 @@ python -c "from evla.policy._proto import vla_pb2; print([m for m in dir(vla_pb2
 | torch が CUDA 版になり数GBダウンロードされる | PyPIのLinux向けtorchはCUDA同梱 | CPU用のindexを指定する（Step 1） |
 | `lerobot` の import で NumPy のエラー | ROSのシェルでvenvを使った | シェルを分ける |
 | SYCL の `sycl-ls` が segfault する | oneAPI 2026.1 の Level Zero アダプタと、Ubuntu 24.04 の `libze1` 1.16 の組み合わせ（vla.cpp の既知の問題。22.04 で 2025.x を使う場合も、`libze1` が古いと同じことが起きうる） | `UR_ADAPTERS_FORCE_LOAD` でOpenCLアダプタを強制する。または oneAPI 2025.3 を使う |
+| SYCL 版の `vla-bench` が、`config = ...` の直後に segfault する | ggml-sycl は Level Zero のヘッダがあると `GGML_SYCL_SUPPORT_LEVEL_ZERO_API=ON` でビルドされ、起動時に `zesInit`（Sysman）を呼ぶ。WSL では compute runtime 24.39 の中でここが落ちる（gdb で確認） | `-DGGML_SYCL_SUPPORT_LEVEL_ZERO_API=OFF` で設定し直す。SYCL 自体は Level Zero のアダプタで GPU で動く |
+| SYCL の設定で、全ターゲットに `requires changing an RPATH ... not supported with the Ninja generator` | 前の設定の `CMAKE_EXECUTABLE_FORMAT=Unknown` が `CMakeCache.txt` に残っている | `rm -rf build-sycl` してから設定する |
+| `build-sycl` なのにバナーが `CPU` で、設定のログが `GNU 11.4.0` | 貼り付けで行が切れ、`-DGGML_SYCL=ON` などが cmake に渡っていない | `rm -rf build-sycl` し、cmake のコマンドを1行で貼る |
+| `vla-bench -hf` が `hf: not found` | Hugging Face の CLI がない | `.venv-bench` を有効にする（`hf` が入っている） |
 | SYCL で `could not create a memory object` | VMMプールとoneDNNの組み合わせ | `GGML_SYCL_ENABLE_VMM=0`（vla.cppの既定）のままにする |
 | SYCL / OV の初回推論が極端に遅い | グラフのコンパイル（OVのGPUでは数十秒〜数分） | ウォームアップで除外する。クライアントのタイムアウトを長くする |
 | OV バックエンドの2回目の起動から行動がおかしい | **`GGML_OPENVINO_CACHE_DIR` を設定すると誤った行動を返す**（vla.cpp の既知の問題） | 設定しない |

@@ -106,12 +106,27 @@ wsl -l -v      # 使うディストリビューションの VERSION が 2 であ
 ### Step 3：WSL内でのGPU確認（1時間）
 
 1. デバイスファイルを確認する：`ls -l /dev/dxg`（存在すればよい。Intel iGPUの場合、WSLには `/dev/dri` が無いことが多い）
-2. Intel compute runtime を入れる。**【要確認】** パッケージの入手元は時期によって変わります。2026年時点の候補は次の2つです。
-   - Intel の GPU 用 apt リポジトリ（<https://dgpu-docs.intel.com/>）の 22.04（jammy）向けから `intel-opencl-icd libze1 clinfo` などを入れる。Intel の PPA（`ppa:kobuk-team/intel-graphics`）は 24.04 以降向けなので使えない
-   - <https://github.com/intel/compute-runtime/releases> の `.deb` 一式を入れる。最新版は新しい Ubuntu でビルドされているので、22.04 の glibc（2.35）で動く版かを確かめる
-   - 22.04 の標準の `intel-opencl-icd`（22.14）は古く、WSL で GPU が見えないことがある
-   - どちらの場合も、**WSLをサポートするビルドか**をリリースノートで確認する。
-3. `clinfo -l` を実行する。`Intel(R) Graphics` などのGPUプラットフォームが列挙されればOK。
+2. Intel compute runtime を、Intel の GPU 用 apt リポジトリの 22.04（jammy）向けから入れる。この端末では 2026-10 に、`intel-opencl-icd` と `libze-intel-gpu1` の 24.39、`libze1` の 1.17 が入り、WSL から iGPU が見えた。
+   - 22.04 の標準の `intel-opencl-icd`（22.14）は古く、WSL で GPU が見えない（この端末では見えなかった）
+   - Intel の PPA（`ppa:kobuk-team/intel-graphics`）は 24.04 以降向けなので使えない
+   - `usermod -aG render,video` は要らない（WSL には `/dev/dri` がなく、`/dev/dxg` を使う）
+   - リポジトリの設定は、複数行で書く `.sources` 形式にする。1行形式（`deb [...] https://... jammy client`）は、端末に貼ると途中で改行が入って `Malformed entry` になりやすい
+
+```bash
+wget -qO- https://repositories.intel.com/gpu/intel-graphics.key | sudo gpg --yes --dearmor -o /usr/share/keyrings/intel-graphics.gpg
+sudo tee /etc/apt/sources.list.d/intel-gpu-jammy.sources <<'EOF'
+Types: deb
+URIs: https://repositories.intel.com/gpu/ubuntu
+Suites: jammy
+Components: client
+Architectures: amd64
+Signed-By: /usr/share/keyrings/intel-graphics.gpg
+EOF
+sudo apt-get update
+sudo apt-get install -y intel-opencl-icd libze-intel-gpu1 libze1 clinfo
+```
+
+3. `clinfo -l` を実行する。`Intel(R) OpenCL Graphics` のプラットフォームに GPU が出ればOK。この runtime には i7-1360P の iGPU の製品名がないので、名前は `Intel(R) Graphics [0xa7a0]`（0xa7a0 は PCI デバイスID）と出る。`clinfo` の `Max compute units` が `96` なら Iris Xe（96EU）である。
 4. `.venv-bench` を作った後（[env/12](12_inference_envs.md)）、OpenVINO から `GPU` が見えることを確認する。
 
 ```bash
@@ -121,8 +136,8 @@ python -c "import openvino as ov; c = ov.Core(); print([(d, c.get_property(d, 'F
 **確かめる**
 
 - [ ] `ls -l /dev/dxg` でデバイスファイルがある
-- [ ] `clinfo -l` に `Intel(R) Graphics` などの GPU プラットフォームが出る
-- [ ] （env/12 の後）OpenVINO のデバイス一覧に `CPU` と `GPU` の両方があり、GPU の名前に `Iris(R) Xe` が入る
+- [ ] `clinfo -l` に `Intel(R) OpenCL Graphics` のプラットフォームと GPU（`Intel(R) Graphics [0xa7a0]`）が出る
+- [ ] （env/12 の後）OpenVINO のデバイス一覧に `CPU` と `GPU` の両方がある（GPU の名前は `Iris(R) Xe` か `Intel(R) Graphics [0xa7a0]`）
 
 ### Step 4：vCPUのP/Eコア推定実験（1〜2時間）
 
