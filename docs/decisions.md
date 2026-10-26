@@ -58,8 +58,18 @@
 
 ## 2026-10-27：vla.cpp の SYCL 版は oneAPI 2025.3 で、Level Zero API なしでビルドする
 
-**決めたこと**：oneAPI は Base Toolkit 2025.3.1 を `~/intel/oneapi` に入れる。vla.cpp の SYCL 版は `-DGGML_SYCL_SUPPORT_LEVEL_ZERO_API=OFF` でビルドする。iGPU の compute runtime は、Intel の jammy 向けリポジトリの 24.39 を使う（env/10 Step 3）。
+**決めたこと**：oneAPI は Base Toolkit 2025.3.1 を `~/intel/oneapi` に入れる。vla.cpp の SYCL 版は `-DGGML_SYCL_SUPPORT_LEVEL_ZERO_API=OFF` でビルドする。iGPU の compute runtime は、Intel の jammy 向けリポジトリの 24.39 を使う（env/10 Step 3。下の 2026-10-27 の判断で 25.13 に替えた）。
 
 **理由**：Level Zero のヘッダ（`libze-dev`）がある環境では、ggml-sycl は起動時に `zesInit`（Sysman）を呼ぶ。WSL では compute runtime の中でここが segfault した（gdb で確認）。OFF にしてビルドし直すと、`backend = SYCL (device 0: Intel(R) Graphics [0xa7a0])` で `vla-bench` が最後まで動いた（`smolvla-libero.gguf`、2画像、512px：最短 3469 ms、中央値 5722 ms、p90 7636 ms）。上の「2026-10-26：検証端末の環境を…」の【要確認】（SYCL 版は 2025.x で試す、compute runtime の入手元）はこれで決まった。
 
 **影響**：OFF にすると、ggml-sycl は GPU の空きメモリの問い合わせなどに Level Zero ではなく SYCL の API を使う。推論の処理自体は Level Zero のアダプタで GPU で動く。GPU の名前は製品名ではなく `Intel(R) Graphics [0xa7a0]` と出るので、報告書には「Iris Xe（i7-1360P、96EU、compute runtime 24.39）」と書く。
+
+## 2026-10-27：iGPU の compute runtime を 25.13 にする（上の「24.39 を使う」を置き換える）
+
+**決めたこと**：compute runtime は、GitHub のリリースの 25.13.33276.16（IGC 2.10.8、gmmlib 22.7.0）を `.deb` で入れる。Level Zero の loader（`libze1` 1.17）は Intel の jammy 向けリポジトリのまま使う。
+
+**理由**：compute runtime の latest（26.x）は 24.04 以降向けで、glibc 2.38・libstdc++ 13 を要求するので 22.04 では動かない。25.13 は `libc6 (>= 2.34)`、`libstdc++6 (>= 12)` で、22.04 で動く一番新しい版である。jammy 向けのリポジトリは 24.39 で止まっている。
+
+**確かめたこと**：`sycl-ls` に `[level_zero:gpu]`（1.6.33276）と `[opencl:gpu]`（25.13.33276.16）が出た。`build-sycl` は作り直さずに `backend = SYCL (device 0: Intel(R) Graphics [0xa7a0])` で動いた（2画像、512px、warmup 2・reps 10：最短 3229 ms、中央値 3844 ms、p90 5359 ms、vision 1721 ms）。24.39 のとき（warmup 3・reps 20：中央値 5722 ms）より速いが、回数と Windows 側のメモリの状態がそろっていないので、runtime の差とは言えない。比べるときは同じ条件で測り直す。
+
+**影響**：報告書の「環境」には「compute runtime 25.13.33276.16（GitHub のリリース）」と書く。apt の `libze-intel-gpu1` を入れると 25.13 の `intel-level-zero-gpu` とぶつかるので入れない。

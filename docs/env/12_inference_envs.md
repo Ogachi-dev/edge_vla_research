@@ -231,7 +231,7 @@ python -c "from evla.policy._proto import vla_pb2; print([m for m in dir(vla_pb2
 | torch が CUDA 版になり数GBダウンロードされる | PyPIのLinux向けtorchはCUDA同梱 | CPU用のindexを指定する（Step 1） |
 | `lerobot` の import で NumPy のエラー | ROSのシェルでvenvを使った | シェルを分ける |
 | SYCL の `sycl-ls` が segfault する | oneAPI 2026.1 の Level Zero アダプタと、Ubuntu 24.04 の `libze1` 1.16 の組み合わせ（vla.cpp の既知の問題。22.04 で 2025.x を使う場合も、`libze1` が古いと同じことが起きうる） | `UR_ADAPTERS_FORCE_LOAD` でOpenCLアダプタを強制する。または oneAPI 2025.3 を使う |
-| SYCL 版の `vla-bench` が、`config = ...` の直後に segfault する | ggml-sycl は Level Zero のヘッダがあると `GGML_SYCL_SUPPORT_LEVEL_ZERO_API=ON` でビルドされ、起動時に `zesInit`（Sysman）を呼ぶ。WSL では compute runtime 24.39 の中でここが落ちる（gdb で確認） | `-DGGML_SYCL_SUPPORT_LEVEL_ZERO_API=OFF` で設定し直す。SYCL 自体は Level Zero のアダプタで GPU で動く |
+| SYCL 版の `vla-bench` が、`config = ...` の直後に segfault する | ggml-sycl は Level Zero のヘッダがあると `GGML_SYCL_SUPPORT_LEVEL_ZERO_API=ON` でビルドされ、起動時に `zesInit`（Sysman）を呼ぶ。WSL では compute runtime の中でここが落ちる（24.39 で、gdb で確認） | `-DGGML_SYCL_SUPPORT_LEVEL_ZERO_API=OFF` で設定し直す。SYCL 自体は Level Zero のアダプタで GPU で動く |
 | SYCL の設定で、全ターゲットに `requires changing an RPATH ... not supported with the Ninja generator` | 前の設定の `CMAKE_EXECUTABLE_FORMAT=Unknown` が `CMakeCache.txt` に残っている | `rm -rf build-sycl` してから設定する |
 | `build-sycl` なのにバナーが `CPU` で、設定のログが `GNU 11.4.0` | 貼り付けで行が切れ、`-DGGML_SYCL=ON` などが cmake に渡っていない | `rm -rf build-sycl` し、cmake のコマンドを1行で貼る |
 | `vla-bench -hf` が `hf: not found` | Hugging Face の CLI がない | `.venv-bench` を有効にする（`hf` が入っている） |

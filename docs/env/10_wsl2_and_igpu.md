@@ -106,7 +106,10 @@ wsl -l -v      # 使うディストリビューションの VERSION が 2 であ
 ### Step 3：WSL内でのGPU確認（1時間）
 
 1. デバイスファイルを確認する：`ls -l /dev/dxg`（存在すればよい。Intel iGPUの場合、WSLには `/dev/dri` が無いことが多い）
-2. Intel compute runtime を、Intel の GPU 用 apt リポジトリの 22.04（jammy）向けから入れる。この端末では 2026-10 に、`intel-opencl-icd` と `libze-intel-gpu1` の 24.39、`libze1` の 1.17 が入り、WSL から iGPU が見えた。
+2. Intel compute runtime を入れる。この端末では、**22.04 で動く一番新しい 25.13（GitHub のリリース）**を使う。
+   - Level Zero の loader（`libze1`、`libze-dev`）と `clinfo` は、Intel の GPU 用 apt リポジトリの 22.04（jammy）向けから入れる。このリポジトリの runtime は 24.39 で止まっている（24.39 でも WSL から iGPU は見えた）
+   - runtime 本体は <https://github.com/intel/compute-runtime/releases/tag/25.13.33276.16> の `.deb` を入れる。**latest（26.x）は glibc 2.38・libstdc++ 13 を要求する（24.04 以降向け）ので、22.04 では入れても動かない**。25.13 の要求は `libc6 (>= 2.34)`、`libstdc++6 (>= 12)` で、22.04 で動く
+   - 25.13 の runtime は `intel-level-zero-gpu`（`libze_intel_gpu.so.1`）なので、リポジトリの `libze-intel-gpu1` は入れない（同じライブラリを持っていてぶつかる）
    - 22.04 の標準の `intel-opencl-icd`（22.14）は古く、WSL で GPU が見えない（この端末では見えなかった）
    - Intel の PPA（`ppa:kobuk-team/intel-graphics`）は 24.04 以降向けなので使えない
    - `usermod -aG render,video` は要らない（WSL には `/dev/dri` がなく、`/dev/dxg` を使う）
@@ -123,10 +126,18 @@ Architectures: amd64
 Signed-By: /usr/share/keyrings/intel-graphics.gpg
 EOF
 sudo apt-get update
-sudo apt-get install -y intel-opencl-icd libze-intel-gpu1 libze1 clinfo
+sudo apt-get install -y libze1 libze-dev clinfo
+# runtime 本体（25.13）。リリースのページの .deb を1つのディレクトリに落としてから入れる
+mkdir -p ~/neo && cd ~/neo
+# intel-igc-core-2_2.10.8+18926、intel-igc-opencl-2_2.10.8+18926、intel-level-zero-gpu_1.6.33276.16、
+# intel-opencl-icd_25.13.33276.16、libigdgmm12_22.7.0 の .deb（dbgsym の .ddeb は要らない）
+sudo dpkg -i *.deb
+cd -
 ```
 
-3. `clinfo -l` を実行する。`Intel(R) OpenCL Graphics` のプラットフォームに GPU が出ればOK。この runtime には i7-1360P の iGPU の製品名がないので、名前は `Intel(R) Graphics [0xa7a0]`（0xa7a0 は PCI デバイスID）と出る。`clinfo` の `Max compute units` が `96` なら Iris Xe（96EU）である。
+間違えて 26.x を入れた場合は、`sudo dpkg -r intel-ocloc` で 26.x の `intel-ocloc`（`libocloc.so` が 25.13 の `intel-opencl-icd` とぶつかる）を外してから、25.13 の `.deb` を `dpkg -i` し直す。最後に `sudo apt-get -f install` で、何も変更が出ないことを確かめる。
+
+3. `clinfo -l` を実行する。`Intel(R) OpenCL Graphics` のプラットフォームに GPU が出ればOK。24.39・25.13 の runtime には i7-1360P の iGPU の製品名がないので、名前は `Intel(R) Graphics [0xa7a0]`（0xa7a0 は PCI デバイスID）と出る。`clinfo` の `Max compute units` が `96` なら Iris Xe（96EU）である。
 4. `.venv-bench` を作った後（[env/12](12_inference_envs.md)）、OpenVINO から `GPU` が見えることを確認する。
 
 ```bash
