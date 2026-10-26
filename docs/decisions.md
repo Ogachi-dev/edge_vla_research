@@ -55,3 +55,11 @@
 **理由**：ogre（1.9）を D3D12 で動かすと、lerobot_ws の SO-101 を表示したときにロボットが消えたり現れたりした。D3D12 には ogre2 が使う `GL_ARB_copy_image` がないが、llvmpipe にはある。llvmpipe＋ogre2 では、同じ launch でちらつきがなくなった（目視で確認）。カメラ付きの world をヘッドレスで起動しても、上方カメラは 640×480 の画像を出し、RTF は 0.98（D3D12＋ogre は 0.95）だった。
 
 **影響**：描画が CPU を使うので、推論のベンチ（トラック1）と Gazebo を同時に動かすと CPU を取り合う。Gazebo の評価はロックステップ（sim 時刻）で行うので結果は変わらないが、所要時間は延びる。報告書の「環境」には「Gazebo は llvmpipe＋ogre2 で描画」と書く。上の判断で書き換えた `~/.ignition/gazebo/6/gui.config` は `ogre2` に戻した。
+
+## 2026-10-27：vla.cpp の SYCL 版は oneAPI 2025.3 で、Level Zero API なしでビルドする
+
+**決めたこと**：oneAPI は Base Toolkit 2025.3.1 を `~/intel/oneapi` に入れる。vla.cpp の SYCL 版は `-DGGML_SYCL_SUPPORT_LEVEL_ZERO_API=OFF` でビルドする。iGPU の compute runtime は、Intel の jammy 向けリポジトリの 24.39 を使う（env/10 Step 3）。
+
+**理由**：Level Zero のヘッダ（`libze-dev`）がある環境では、ggml-sycl は起動時に `zesInit`（Sysman）を呼ぶ。WSL では compute runtime の中でここが segfault した（gdb で確認）。OFF にしてビルドし直すと、`backend = SYCL (device 0: Intel(R) Graphics [0xa7a0])` で `vla-bench` が最後まで動いた（`smolvla-libero.gguf`、2画像、512px：最短 3469 ms、中央値 5722 ms、p90 7636 ms）。上の「2026-10-26：検証端末の環境を…」の【要確認】（SYCL 版は 2025.x で試す、compute runtime の入手元）はこれで決まった。
+
+**影響**：OFF にすると、ggml-sycl は GPU の空きメモリの問い合わせなどに Level Zero ではなく SYCL の API を使う。推論の処理自体は Level Zero のアダプタで GPU で動く。GPU の名前は製品名ではなく `Intel(R) Graphics [0xa7a0]` と出るので、報告書には「Iris Xe（i7-1360P、96EU、compute runtime 24.39）」と書く。
