@@ -50,8 +50,8 @@ class VlaServerProcess:
         self._ready = threading.Event()
 
     def _cmd(self) -> list[str]:
-        # 【要確認】引数名は `vla-server --help` で確かめる
-        return [str(self.cfg.binary), "-m", str(self.cfg.gguf), "--bind", self.cfg.bind, *self.cfg.args]
+        # チェックポイントは位置引数で、オプションの後ろに置く（`vla-server --help`）
+        return [str(self.cfg.binary), "--bind", self.cfg.bind, *self.cfg.args, str(self.cfg.gguf)]
 
     def _reader(self) -> None:
         assert self._proc is not None and self._proc.stdout is not None
