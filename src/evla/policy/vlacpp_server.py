@@ -8,6 +8,7 @@ import re
 import signal
 import subprocess
 import threading
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -50,8 +51,8 @@ class VlaServerProcess:
         self._ready = threading.Event()
 
     def _cmd(self) -> list[str]:
-        # 【要確認】引数名は `vla-server --help` で確かめる
-        return [str(self.cfg.binary), "-m", str(self.cfg.gguf), "--bind", self.cfg.bind, *self.cfg.args]
+        # チェックポイントは位置引数で、オプションの後ろに置く（`vla-server --help`）
+        return [str(self.cfg.binary), "--bind", self.cfg.bind, *self.cfg.args, str(self.cfg.gguf)]
 
     def _reader(self) -> None:
         assert self._proc is not None and self._proc.stdout is not None
@@ -73,9 +74,14 @@ class VlaServerProcess:
         )
         atexit.register(self._terminate)  # 例外で抜けてもゾンビを残さない
         threading.Thread(target=self._reader, daemon=True).start()
-        if not self._ready.wait(timeout=self.cfg.ready_timeout_s):  # 【穴⑤】イベントを最大 ready_timeout_s 秒待つ（来なければ False）
-            self._terminate()
-            raise TimeoutError(f"vla-server が ready にならない。ログ末尾: {self._lines[-20:]}")
+        deadline = time.monotonic() + self.cfg.ready_timeout_s
+        while not self._ready.wait(timeout=1.0):  # 【穴⑤】イベントを待つ（来なければ False）
+            if self._proc.poll() is not None:  # ready の前に落ちたら、待たずに失敗にする
+                raise RuntimeError(f"vla-server が起動中に終了した（rc={self._proc.returncode}）。"
+                                   f"ログ末尾: {self._lines[-20:]}")
+            if time.monotonic() > deadline:
+                self._terminate()
+                raise TimeoutError(f"vla-server が ready にならない。ログ末尾: {self._lines[-20:]}")
         if self.cfg.expect_backend is not None:
             actual = detect_backend(self.banner)
             if actual != self.cfg.expect_backend:

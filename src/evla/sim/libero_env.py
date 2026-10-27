@@ -16,6 +16,7 @@ from evla.sim.types import Observation, StepResult
 
 # LeRobot の TASK_SUITE_MAX_STEPS と同じ値。【要確認】lerobot/envs/libero.py
 MAX_STEPS = {"libero_spatial": 220, "libero_object": 280, "libero_goal": 300, "libero_10": 520}
+ACTION_TOL = 0.1   # 行動の範囲 [-1, 1] からのはみ出しを許す量
 CAMERAS = {"image": "agentview_image", "image2": "robot0_eye_in_hand_image"}
 
 
@@ -95,8 +96,11 @@ class LiberoTaskEnv:
         a = np.asarray(action, dtype=np.float32)
         if a.shape != (7,):
             raise ValueError(f"行動の形が違う: {a.shape}")
-        if np.any(np.abs(a) > 1.0 + 1e-6):  # 【穴⑧】範囲 [-1, 1] を（誤差を少し許して）超えた要素
+        # SmolVLA の出力（特にグリッパ）は ±1 を少しはみ出す（例 -1.024）。0.1 までは丸め、
+        # それより大きく外れたら座標系や逆正規化の誤りとみなして止める
+        if np.any(np.abs(a) > 1.0 + ACTION_TOL):  # 【穴⑧】範囲 [-1, 1] を（誤差を少し許して）超えた要素
             raise ValueError(f"行動が範囲外: {a}")
+        a = np.clip(a, -1.0, 1.0)
         raw, _reward, terminated, truncated, info = self._env.step(a)  # 【穴⑨】行動を1つ実行する gymnasium のメソッド（観測, 報酬, terminated, truncated, info の5つを返す）
         self._t += 1
         success = bool(info.get("is_success", False))

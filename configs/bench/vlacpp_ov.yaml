@@ -1,0 +1,15 @@
+# vla.cpp の ov 版（iGPU）。scripts/vla_server.sh がバックエンドの環境を読んでから vla-server を起動する
+policy:
+  runtime: vlacpp
+  model: data/models/gguf/smolvla-libero.gguf
+  server_addr: tcp://127.0.0.1:5555
+  extra: {action_dim: 7}
+server:
+  binary: scripts/vla_server.sh
+  gguf: data/models/gguf/smolvla-libero.gguf
+  bind: tcp://127.0.0.1:5555
+  env: {VLA_BACKEND: ov, GGML_OPENVINO_DEVICE: GPU}
+  expect_backend: OPENVINO
+  ready_timeout_s: 900
+fixed_obs: data/fixed_obs/libero_object_t0.npz
+n_measure: 50

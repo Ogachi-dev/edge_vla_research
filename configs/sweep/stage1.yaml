@@ -10,5 +10,13 @@ grid:
   - policy.runtime: [ov]
     policy.device: [CPU, GPU]
     policy.model: [data/models/ov/smolvla-libero-fp16-ov, data/models/ov/smolvla-libero-w8a16-ov]
+  # vla.cpp は vla-server を起動するので、server の設定ごと上書きする。
+  # scripts/vla_server.sh が VLA_BACKEND に応じて build / build-sycl / build-ov を選び、環境を読む
+  - policy.runtime: [vlacpp]
+    policy.model: [data/models/gguf/smolvla-libero.gguf]
+    policy.extra: [{action_dim: 7}]
+    server:
+      - {binary: scripts/vla_server.sh, gguf: data/models/gguf/smolvla-libero.gguf, env: {VLA_BACKEND: cpu}, expect_backend: CPU}
+      - {binary: scripts/vla_server.sh, gguf: data/models/gguf/smolvla-libero.gguf, env: {VLA_BACKEND: sycl}, expect_backend: SYCL, ready_timeout_s: 900}
+      - {binary: scripts/vla_server.sh, gguf: data/models/gguf/smolvla-libero.gguf, env: {VLA_BACKEND: ov, GGML_OPENVINO_DEVICE: GPU}, expect_backend: OPENVINO, ready_timeout_s: 900}
 exclude: []
-# TODO(you): vlacpp の行（server.binary / server.gguf）を足す。vlacpp は server の設定ごと上書きが必要
