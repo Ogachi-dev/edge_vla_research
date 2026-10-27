@@ -2,6 +2,7 @@
 policy:
   runtime: torch
   model: HuggingFaceVLA/smolvla_libero
+  n_threads: 8        # CPU のスレッド数（vla.cpp は VLA_N_THREADS で受け取る）
 fixed_obs: data/fixed_obs/libero_object_t0.npz
 n_warmup: 3
 n_measure: 50
