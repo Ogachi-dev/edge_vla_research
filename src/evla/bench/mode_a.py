@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import pandas as pd
+import psutil
 
 from evla.bench.memory import PeakRssMonitor
 from evla.bench.timing import Stopwatch, summarize_latencies
@@ -76,7 +77,7 @@ def run_mode_a(cfg: ModeAConfig, run_dir: Path) -> RunResult:
         for i in range(n_total):
             k = i % len(obs_list) if cfg.obs_cycle else 0  # 【穴②】観測を順番に使い回す番号
             t_start_ns = time.time_ns()  # Windows側のログとの突き合わせ用（壁時計）
-            vcpu = os.sched_getcpu()
+            vcpu = psutil.Process().cpu_num()  # os.sched_getcpu は Python 3.12 にない
             r = policy.predict_chunk(obs_list[k], noise)
             if i == 0:
                 first_ms = r.latency_ms
