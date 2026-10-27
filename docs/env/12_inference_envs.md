@@ -113,8 +113,20 @@ python -c "import lerobot, openvino as ov, physicalai; print(lerobot.__version__
 - [ ] 1行目が `2.x.x+cpu False` のように、`+cpu` で終わり、`False` になっている
 - [ ] 2行目に lerobot の版と、`['CPU', 'GPU']` が出る（`GPU` が無ければ [env/10](10_wsl2_and_igpu.md) の Step 3 に戻る）
 - [ ] `requirements/bench.lock.txt` ができている
+- [ ] `uv pip check` が `All installed packages are compatible` になる
 
-torch が CUDA 版に置き換わっていたら（`+cpu` が無い）、`uv pip install` に `--torch-backend cpu` を付けて入れ直す（**【要確認】** uv のバージョンによる）。
+torch が CUDA 版に置き換わっていたら（`+cpu` が無い）、**版を固定して torch だけを** CPU 版に入れ直し、CUDA のパッケージを消す（uv 0.13 で確認）。
+
+```bash
+uv pip list | grep -iE "^torch"                    # 今の版を見る（例：torch 2.11.0、torchvision 0.26.0、torchaudio 2.11.0）
+uv pip install --torch-backend cpu --reinstall-package torch --reinstall-package torchvision --reinstall-package torchaudio torch==2.11.0 torchvision==0.26.0 torchaudio==2.11.0
+uv pip uninstall $(uv pip list | awk '/^(nvidia-|cuda-|triton)/{print $1}')
+uv pip check
+```
+
+- `--torch-backend cpu` だけではパッケージ名が要る（`uv pip install --torch-backend cpu` だけだと、引数が足りないエラーになる）
+- `--reinstall` は使わない。依存も含めて全部を入れ直し、lerobot が要求しない範囲の最新版にする（この端末では numpy 2.5.4・pillow 13.0.0 などに上がり、`uv pip check` が lerobot の `numpy<2.3`・`pillow<13` で失敗した）。上がってしまったら、`requirements/bench.lock.txt` の版を `uv pip install <名前>==<版>` で入れ直す
+- `nvidia-*`、`cuda-*`、`triton` を使うのは CUDA 版の torch だけなので、消してよい（`uv pip tree --invert --package triton` で確かめられる）。この端末では venv が約 2.7GB 小さくなった
 
 ### Step 2：`.venv-export`（30分。D8までに準備すればよい）
 
