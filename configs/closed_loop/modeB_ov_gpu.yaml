@@ -1,0 +1,7 @@
+# モードB（ロックステップ）を OpenVINO の GPU 版で回す。モードAで最も速かった設定（p50 約 1 秒）
+policy: {runtime: ov, model: data/models/ov/smolvla-libero-fp16-ov, device: GPU, precision: fp16}
+executor: {mode: lockstep, n_exec: 10}
+latency: {type: measured}
+task_ids: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+episodes_per_task: 5
+save_video: none
