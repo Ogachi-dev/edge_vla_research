@@ -35,6 +35,11 @@ class OVSmolVLA(Policy):
             cfg.model, backend="openvino", device=cfg.device, **self._ov_config()  # 【穴①】compile config を「キーワード引数として展開して」渡す
         )
         self.load_s = time.perf_counter() - t0
+        # 公開版の manifest は ActionChunkTrimmer（n_action_steps=1）で先頭の1行だけを返す。
+        # 実行する行数は executor が決めるので、IR の出力（50×7）をそのまま使う
+        self.model.postprocessors = [
+            p for p in self.model.postprocessors if type(p).__name__ != "ActionChunkTrimmer"
+        ]
         self._chunk_size: int | None = None
         self._action_dim: int | None = None
 
