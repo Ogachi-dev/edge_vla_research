@@ -113,7 +113,6 @@ python -c "import lerobot, openvino as ov, physicalai; print(lerobot.__version__
 - [ ] 1行目が `2.x.x+cpu False` のように、`+cpu` で終わり、`False` になっている
 - [ ] 2行目に lerobot の版と、`['CPU', 'GPU']` が出る（`GPU` が無ければ [env/10](10_wsl2_and_igpu.md) の Step 3 に戻る）
 - [ ] `requirements/bench.lock.txt` ができている
-
 - [ ] `uv pip check` が `All installed packages are compatible` になる
 
 torch が CUDA 版に置き換わっていたら（`+cpu` が無い）、**版を固定して torch だけを** CPU 版に入れ直し、CUDA のパッケージを消す（uv 0.13 で確認）。
