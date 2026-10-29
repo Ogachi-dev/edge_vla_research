@@ -7,8 +7,14 @@ cooldown_s: 60
 grid:
   - policy.runtime: [torch]
     policy.precision: [fp32, bf16]
+  # OV は精度（INFERENCE_PRECISION_HINT）を書かないと base の fp32 になり、GPU も f32 で動く（fp16 より約 1.7 倍遅い）
   - policy.runtime: [ov]
-    policy.device: [CPU, GPU]
+    policy.device: [GPU]
+    policy.precision: [fp32, fp16]
+    policy.model: [data/models/ov/smolvla-libero-fp16-ov, data/models/ov/smolvla-libero-w8a16-ov]
+  - policy.runtime: [ov]
+    policy.device: [CPU]
+    policy.precision: [fp32]
     policy.model: [data/models/ov/smolvla-libero-fp16-ov, data/models/ov/smolvla-libero-w8a16-ov]
   # vla.cpp は vla-server を起動するので、server の設定ごと上書きする。
   # scripts/vla_server.sh が VLA_BACKEND に応じて build / build-sycl / build-ov を選び、環境を読む
