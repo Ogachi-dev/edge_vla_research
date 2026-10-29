@@ -20,19 +20,23 @@ RUNS = Path("results/runs")
 def run_label(row: pd.Series) -> str:
     """表と図に出す設定の名前。tag があればそれ、無ければランタイムごとに効く設定から作る。
     掃引が付ける tag（<掃引の名前>_r<周>）は設定を区別しないので使わない。
-    例：torch/fp32、ov/GPU/fp16、ov/CPU/fp32/w8a16、vlacpp/sycl"""
+    非同期（executor.mode=async）には /async を付ける。
+    例：torch/fp32、ov/GPU/fp16、ov/CPU/fp32/w8a16、ov/GPU/fp16/int4/async、vlacpp/sycl"""
     tag = row.get("tag")
     if isinstance(tag, str) and tag and not re.fullmatch(r".+_r\d+", tag):
         return tag
     runtime = str(row.get("policy.runtime"))
     if runtime == "vlacpp":  # デバイスと精度は vla-server 側で決まる
         backend = row.get("server.env.VLA_BACKEND")
-        return f"vlacpp/{backend if isinstance(backend, str) else 'cpu'}"
-    keys = ("policy.device", "policy.precision") if runtime == "ov" else ("policy.precision",)
-    parts = [runtime] + [str(row.get(k)) for k in keys if isinstance(row.get(k), str)]
-    model = row.get("policy.model")
-    if isinstance(model, str) and "w8a16" in model:
-        parts.append("w8a16")
+        parts = [f"vlacpp/{backend if isinstance(backend, str) else 'cpu'}"]
+    else:
+        keys = ("policy.device", "policy.precision") if runtime == "ov" else ("policy.precision",)
+        parts = [runtime] + [str(row.get(k)) for k in keys if isinstance(row.get(k), str)]
+        model = row.get("policy.model")
+        # 重みの量子化（公開の w8a16、scripts/quantize_ov.py の int8・int4）
+        parts += [q for q in ("w8a16", "int8", "int4") if isinstance(model, str) and q in model]
+    if row.get("executor.mode") == "async":
+        parts.append("async")
     return "/".join(parts)
 
 
@@ -80,7 +84,8 @@ def load_closed_loop(pattern: str) -> pd.DataFrame:
 
 
 def success_table_and_pareto() -> None:
-    df = load_closed_loop("*_t1_modeB_*")
+    # 同期（モードB）に、実測の推論時間を遅延にした非同期（モードC、latency.type=measured）を並べる
+    df = pd.concat([load_closed_loop("*_t1_modeB_*"), _mode_c("measured")], ignore_index=True)
     if df.empty:
         print("モードBの run がない")
         return
@@ -94,8 +99,15 @@ def success_table_and_pareto() -> None:
     pareto_plot(plot_df, REPORTS / "figures" / "pareto")
 
 
-def latency_tolerance() -> None:
+def _mode_c(latency_type: str) -> pd.DataFrame:
     df = load_closed_loop("*_t1_modeC-*")
+    if df.empty or "latency.type" not in df.columns:
+        return df
+    return df[df["latency.type"] == latency_type]
+
+
+def latency_tolerance() -> None:
+    df = _mode_c("constant")  # 遅延許容曲線は仮想の一定の遅延の run だけ
     if df.empty or "latency.ms" not in df.columns:
         print("モードCの run（latency.type=constant）がない")
         return
