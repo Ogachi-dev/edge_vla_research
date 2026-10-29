@@ -20,8 +20,8 @@ RUNS = Path("results/runs")
 def run_label(row: pd.Series) -> str:
     """表と図に出す設定の名前。tag があればそれ、無ければランタイムごとに効く設定から作る。
     掃引が付ける tag（<掃引の名前>_r<周>）は設定を区別しないので使わない。
-    非同期（executor.mode=async）には /async を付ける。
-    例：torch/fp32、ov/GPU/fp16、ov/CPU/fp32/w8a16、ov/GPU/fp16/int4/async、vlacpp/sycl"""
+    非同期（executor.mode=async）には /async と、次の推論を始めるキューの残り（async_threshold）を付ける。
+    例：torch/fp32、ov/GPU/fp16、ov/CPU/fp32/w8a16、ov/GPU/fp16/async/th20、vlacpp/sycl"""
     tag = row.get("tag")
     if isinstance(tag, str) and tag and not re.fullmatch(r".+_r\d+", tag):
         return tag
@@ -36,7 +36,8 @@ def run_label(row: pd.Series) -> str:
         # 重みの量子化（公開の w8a16、scripts/quantize_ov.py の int8・int4）
         parts += [q for q in ("w8a16", "int8", "int4") if isinstance(model, str) and q in model]
     if row.get("executor.mode") == "async":
-        parts.append("async")
+        th = row.get("executor.async_threshold")
+        parts.append("async" if pd.isna(th) else f"async/th{int(th)}")
     return "/".join(parts)
 
 
