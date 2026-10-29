@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -18,9 +19,10 @@ RUNS = Path("results/runs")
 
 def run_label(row: pd.Series) -> str:
     """表と図に出す設定の名前。tag があればそれ、無ければランタイムごとに効く設定から作る。
+    掃引が付ける tag（<掃引の名前>_r<周>）は設定を区別しないので使わない。
     例：torch/fp32、ov/GPU/fp16、ov/CPU/fp32/w8a16、vlacpp/sycl"""
     tag = row.get("tag")
-    if isinstance(tag, str) and tag:
+    if isinstance(tag, str) and tag and not re.fullmatch(r".+_r\d+", tag):
         return tag
     runtime = str(row.get("policy.runtime"))
     if runtime == "vlacpp":  # デバイスと精度は vla-server 側で決まる
