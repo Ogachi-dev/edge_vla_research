@@ -43,15 +43,17 @@ def episode_seed(seed: int, task_id: int, init_state: int) -> int:
 
 
 class _RecordingEnv:
-    """executor から見ると env と同じ。step のたびに動画用のフレームを集める。"""
+    """executor から見ると env と同じ。step のたびに動画用のフレームと実時間（推論の待ちを含む）を集める。"""
 
     def __init__(self, env: LiberoTaskEnv) -> None:
         self.env = env
         self.frames: list[np.ndarray] = [env.render_frame()]
+        self.times: list[float] = [time.perf_counter()]
 
     def step(self, action: np.ndarray) -> Any:
         res = self.env.step(action)
         self.frames.append(self.env.render_frame())
+        self.times.append(time.perf_counter())
         return res
 
 
@@ -95,6 +97,8 @@ def run_eval(cfg: ClosedLoopConfig, run_dir: Path) -> pd.DataFrame:
                         video_dir.mkdir(exist_ok=True)
                         name = f"task{task_id}_ep{ep}_{'ok' if success else 'fail'}.mp4"
                         imageio.mimsave(video_dir / name, step_env.frames, fps=int(cfg.executor.control_hz))
+                        # 各フレームの実時間 [s]。scripts/make_video_grid.py --wallclock で実時間の動画を作る
+                        np.save(video_dir / name.replace(".mp4", "_t.npy"), np.array(step_env.times) - step_env.times[0])
             finally:
                 env.close()
     df = pd.DataFrame(rows)
