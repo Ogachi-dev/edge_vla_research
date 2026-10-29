@@ -1,0 +1,8 @@
+# 非同期（モードC）を、実測の推論時間をそのまま遅延にして回す。この端末で、実時間で止まらずに動かしたときに相当する
+# （推論している間も前のチャンクの行動を実行し続け、推論にかかった時間の分だけ古い観測から作った行動を使う）
+policy: {runtime: ov, model: data/models/ov/smolvla-libero-fp16-ov, device: GPU, precision: fp16}
+executor: {mode: async, n_exec: 25, async_threshold: 10}
+latency: {type: measured}
+task_ids: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+episodes_per_task: 5
+save_video: none
