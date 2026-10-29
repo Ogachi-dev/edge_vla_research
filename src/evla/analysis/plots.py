@@ -24,7 +24,9 @@ def save(fig: plt.Figure, out: Path) -> None:
 def pareto_plot(df: pd.DataFrame, out: Path, x: str = "p50_ms", y: str = "success_rate") -> None:
     """横軸 p50、縦軸 成功率（Wilson 区間のエラーバー）。マーカーの形＝ランタイム、色＝精度。"""
     fig, ax = plt.subplots(figsize=(6, 4))
-    markers = dict(zip(sorted(df["runtime"].unique()), "os^Dv", strict=False))
+    shapes = "os^Dv<>pPXh*"  # ランタイムがこれより多いときは、形を繰り返して使う
+    runtimes = sorted(df["runtime"].unique())
+    markers = {rt: shapes[i % len(shapes)] for i, rt in enumerate(runtimes)}
     for (rt, prec), g in df.groupby(["runtime", "precision"]):
         yerr = np.vstack([g[y] - g["ci_lo"], g["ci_hi"] - g[y]])
         ax.errorbar(g[x], g[y], yerr=yerr, fmt=markers[rt], label=f"{rt}/{prec}", capsize=3)  # 【穴①】縦方向のエラーバー（下側と上側の長さ）を渡す引数
