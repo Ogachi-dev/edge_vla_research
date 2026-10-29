@@ -37,9 +37,11 @@ class TorchSmolVLA(Policy):
         self.policy.config.num_steps = cfg.num_steps  # 【要確認】flow matching のステップ数の属性名
         self.policy.eval()  # 【穴③】dropout などを推論モードにする nn.Module のメソッド
         self.policy.to("cpu")
-        # 重みは bf16 で保存されていて、from_pretrained はその型のまま読む。
-        # この CPU は bf16 の演算を持たず極端に遅いので、fp32 は明示的に変換する
-        self.policy.to(torch.bfloat16 if cfg.precision == "bf16" else torch.float32)
+        # 重みは混合精度で保存されていて（VLM は bf16、state_proj・action_*_proj などは fp32）、
+        # from_pretrained はその型のまま読む。bf16 はこのまま使う（全部を bf16 にすると、
+        # fp32 の入力と射影の型がぶつかる）。この CPU は bf16 の演算を持たず極端に遅いので、fp32 は明示的に変換する
+        if cfg.precision != "bf16":
+            self.policy.to(torch.float32)
         self.pre, self.post = make_pre_post_processors(
             self.policy.config,
             pretrained_path=cfg.model,
