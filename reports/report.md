@@ -84,7 +84,18 @@ vla.cpp は別プロセスの vla-server として起動し、ZeroMQ で呼ん�
 - PyTorch と vla.cpp には、固定したノイズを与えた。
 - OpenVINO の IR はノイズを入力に取らないので、中で生成したノイズを使う。
 
-### 4.3 掃引
+### 4.3 タスク（LIBERO-Object）
+
+LIBERO-Object の 10 タスクは、どれも「指定された物体をつかみ、左のかごに入れる」タスクである。
+- 床には、対象のほかにも似た形の食品（缶、瓶、箱）がいくつも置かれている。
+- 指示文で対象を区別する必要があり、言語の理解と物体の見分けが問われる。
+- 初期状態（物体の配置）は、各タスクで固定された 50 通りのうち、0〜4 番を使った。
+
+下の図は、各タスクの初期状態 0 である（`scripts/render_task_images.py` で作成）。指示文は 5.2節の表にある。
+
+![LIBERO-Object の 10 タスク（初期状態 0）](figures/tasks/tasks_grid.png)
+
+### 4.4 掃引
 
 モードAで、次の組み合わせを3周ずつ回した（`configs/sweep/stage1.yaml`、`configs/sweep/stage1_sycl.yaml`）。
 
@@ -144,12 +155,24 @@ vla.cpp は別プロセスの vla-server として起動し、ZeroMQ で呼ん�
 - 実効の制御周期は、全エピソードのステップ数の合計を、実時間の合計で割った値。推論の待ちと、シミュレーション・描画の時間を含む。
 - 成功したエピソードのステップ数の中央値は、140〜145 ステップだった。20 Hz の制御では、約 7 秒の動作に当たる。
 
-**失敗したタスク**（タスク番号：失敗数）
-- OV GPU：0:1、4:2
-- PyTorch：2:1、4:3、5:4、7:1
-- vla.cpp の OpenVINO 版：1:1、2:1、3:2、4:3、5:2、7:1、9:1
+**タスクごとの成功数**（各設定 5 エピソード中。画像は初期状態 0）
 
-タスク 4 は、どの設定でも失敗が多かった。
+| タスク | 初期状態 | 指示文 | OV GPU fp16 | PyTorch fp32 | vla.cpp OV | 計（/15） |
+| ---: | --- | --- | ---: | ---: | ---: | ---: |
+| 0 | <img src="figures/tasks/task0.png" width="140"> | pick up the alphabet soup and place it in the basket | 4 | 5 | 5 | 14 |
+| 1 | <img src="figures/tasks/task1.png" width="140"> | pick up the cream cheese and place it in the basket | 5 | 5 | 4 | 14 |
+| 2 | <img src="figures/tasks/task2.png" width="140"> | pick up the salad dressing and place it in the basket | 5 | 4 | 4 | 13 |
+| 3 | <img src="figures/tasks/task3.png" width="140"> | pick up the bbq sauce and place it in the basket | 5 | 5 | 3 | 13 |
+| 4 | <img src="figures/tasks/task4.png" width="140"> | pick up the ketchup and place it in the basket | 3 | 2 | 2 | **7** |
+| 5 | <img src="figures/tasks/task5.png" width="140"> | pick up the tomato sauce and place it in the basket | 5 | **1** | 3 | 9 |
+| 6 | <img src="figures/tasks/task6.png" width="140"> | pick up the butter and place it in the basket | 5 | 5 | 5 | 15 |
+| 7 | <img src="figures/tasks/task7.png" width="140"> | pick up the milk and place it in the basket | 5 | 4 | 4 | 13 |
+| 8 | <img src="figures/tasks/task8.png" width="140"> | pick up the chocolate pudding and place it in the basket | 5 | 5 | 5 | 15 |
+| 9 | <img src="figures/tasks/task9.png" width="140"> | pick up the orange juice and place it in the basket | 5 | 5 | 4 | 14 |
+
+- タスク 4（ケチャップ）は、どの設定でも失敗が多かった（計 7/15）。床には似た形の瓶がいくつも並んでいて、対象を見分けにくいためと考えられる（画像を見ての推測で、確かめてはいない）。
+- タスク 5（トマトソース）は、PyTorch だけが 1/5 と極端に低かった。OV GPU は 5/5 だった。各セル 5 エピソードなので、偶然の差である可能性も大きい。
+- タスク 6（バター）と 8（チョコレートプリン）は、どの設定も 5/5 だった。
 
 ### 5.3 パレート図
 
@@ -284,6 +307,7 @@ export MUJOCO_GL=glfw
 setsid scripts/run_overnight.sh > results/overnight.log 2>&1 &
 python scripts/make_report_tables.py       # reports/ の表と図を作り直す
 scripts/record_videos.sh 0 4               # 動画（約 15 分）
+python scripts/render_task_images.py       # 各タスクの初期状態の画像（reports/figures/tasks/）
 ```
 
 - 環境の作り方は `docs/env/10_wsl2_and_igpu.md` と `docs/env/12_inference_envs.md` にある。
