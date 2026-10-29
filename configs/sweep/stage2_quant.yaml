@@ -1,0 +1,17 @@
+# 段2：OpenVINO の重みの量子化（scripts/quantize_ov.py で作った int8・int4）。python scripts/sweep.py configs/sweep/stage2_quant.yaml --dry_run
+# fp16 の IR と公開の w8a16 は段1で測った。公開の w8a16 は CPU で読めなかったが、NNCF の int8 は CPU でも動く
+name: stage2_quant
+mode: A
+base: configs/bench/base.yaml
+rounds: 3
+cooldown_s: 60
+grid:
+  - policy.runtime: [ov]
+    policy.device: [GPU]
+    policy.precision: [fp16]
+    policy.model: [data/models/ov/smolvla-libero-int8-ov, data/models/ov/smolvla-libero-int4-ov]
+  - policy.runtime: [ov]
+    policy.device: [CPU]
+    policy.precision: [fp32]
+    policy.model: [data/models/ov/smolvla-libero-int8-ov, data/models/ov/smolvla-libero-int4-ov]
+exclude: []
