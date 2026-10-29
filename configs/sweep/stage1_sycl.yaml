@@ -1,0 +1,15 @@
+# 段1のうち vla.cpp SYCL 版だけ。python scripts/sweep.py configs/sweep/stage1_sycl.yaml --dry_run
+# OV GPU を長く回した直後に続けると、GPU のメモリの確保に失敗して WSL ごと止まった（2026-10-28）。
+# そのため夜間の実行の最後に単独で回す。表では stage1.yaml の結果と同じ表にまとまる（label は vlacpp/sycl）
+name: stage1_sycl
+mode: A
+base: configs/bench/base.yaml
+rounds: 3
+cooldown_s: 60
+grid:
+  - policy.runtime: [vlacpp]
+    policy.model: [data/models/gguf/smolvla-libero.gguf]
+    policy.extra: [{action_dim: 7}]
+    server:
+      - {binary: scripts/vla_server.sh, gguf: data/models/gguf/smolvla-libero.gguf, env: {VLA_BACKEND: sycl}, expect_backend: SYCL, ready_timeout_s: 900}
+exclude: []
