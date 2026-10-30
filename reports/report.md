@@ -282,6 +282,16 @@ LIBERO-Object の 10 タスクは、どれも「指定された物体をつか�
   - 30 秒の時点で、OV GPU は 176 ステップ、vla.cpp OV は 140 ステップ、PyTorch は 60 ステップまで進んでいた。
   - 推論の速さの違いが、ロボットが止まっている時間の違いとして見える。
 
+量子化と非同期の動画は、タスク 4 と 7 の初期状態 1 で撮った（`scripts/record_videos_async_quant.sh`）。この初期状態では、設定ごとに成否が分かれた。
+- `quant_task{4,7}.mp4`：同期の fp16、8bit（w8a16）、4bit（int4）を、シミュレーション時間をそろえて並べたもの。
+  - どちらのタスクも、fp16 と 8bit は成功し、4bit は失敗した。
+  - タスク 7 では、4bit も牛乳パックを持ち上げたが、かごに届く前に落とし、時間切れになった。
+- `realtime_task{4,7}.mp4`：同期の 8bit と、実測の遅延での非同期（threshold 10・20）を、実時間に相当する時間で並べたもの。
+  - 同期の 8bit は、推論の待ちを含む実時間で並べた。
+  - 非同期は、遅延をシミュレーションの中で進めているので、シミュレーション時間がそのまま実時間に当たる。
+  - タスク 4 の 10 秒の時点で、同期は 50 ステップまでしか進んでいなかった。非同期の threshold 10 は 200 ステップまで進んでいたが、待ちを繰り返していて、まだつかめていなかった。
+  - 非同期の threshold 20 は、8.3 秒で成功していた。
+
 ## 6. 考察
 
 ### 6.1 計画書の問いへの答え
@@ -404,6 +414,7 @@ export MUJOCO_GL=glfw
 setsid scripts/run_overnight.sh > results/overnight.log 2>&1 &
 python scripts/make_report_tables.py       # reports/ の表と図を作り直す
 scripts/record_videos.sh 0 4               # 動画（約 15 分）
+scripts/record_videos_async_quant.sh 4 7   # 量子化と非同期の動画（約 20 分）
 python scripts/render_task_images.py       # 各タスクの初期状態の画像（reports/figures/tasks/）
 # 量子化した IR を作り、非同期・量子化・遅延許容曲線を回す（約 4.5 時間）
 python scripts/quantize_ov.py --src data/models/ov/smolvla-libero-fp16-ov --out data/models/ov/smolvla-libero-int4-ov --mode int4_asym
