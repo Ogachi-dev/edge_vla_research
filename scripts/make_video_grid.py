@@ -5,6 +5,8 @@
         "ov/GPU=results/videos/modeB_ov_gpu/task0_ep0_ok.mp4" "torch=results/videos/modeB_torch/task0_ep0_ok.mp4"
 --wallclock を付けると、各フレームの実時間（*_t.npy。推論の待ちを含む。最初の推論のウォームアップは除く）に合わせて並べる。
 ロックステップでは推論中にシミュレーションが止まるので、実時間の動画では推論の遅い設定ほど止まって見える。
+パスの後ろに "|sim" を付けた動画は、--wallclock でもシミュレーション時間で並べる。実測の推論時間を遅延にした
+非同期（モードC、latency.type=measured）は、シミュレーション時間がそのまま実時間に当たるので、これを使う。
 """
 
 from __future__ import annotations
@@ -56,9 +58,11 @@ def main() -> None:
     clips = []
     for spec in a.inputs:
         label, path = spec.split("=", 1)
+        path, _, timing = path.partition("|")
         frames = iio.imread(path)
         # 実時間は録画時に保存した *_t.npy、シミュレーション時間は 1ステップ = 1/fps 秒
-        times = _warm(np.load(path.replace(".mp4", "_t.npy"))) if a.wallclock else np.arange(len(frames)) / a.fps
+        wall = a.wallclock and timing != "sim"
+        times = _warm(np.load(path.replace(".mp4", "_t.npy"))) if wall else np.arange(len(frames)) / a.fps
         badge = "SUCCESS" if "_ok" in Path(path).stem else "FAIL"
         clips.append((label, frames, times, badge))
 
